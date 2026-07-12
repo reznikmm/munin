@@ -1,7 +1,7 @@
---  SPDX-FileCopyrightText: 2026 Munin Developer
+--  SPDX-FileCopyrightText: 2026 Max Reznik <reznikmm@gmail.com>
 --
---  SPDX-License-Identifier: MIT OR Apache-2.0 WITH LLVM-exception
---
+--  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 --  Dummy test case for Munin core API (Iteration 1 smoke test)
 
 package body Test_Dummy is
@@ -10,7 +10,7 @@ package body Test_Dummy is
      (Op : in out Trendy_Test.Operation'Class)
    is
    begin
-      Op.Register;
+      Op.Register (Parallelize => False);
       Op.Assert (2 + 2 = 4);
       Op.Assert (10 - 3 = 7);
       Op.Assert (5 * 2 = 10);
@@ -20,7 +20,7 @@ package body Test_Dummy is
      (Op : in out Trendy_Test.Operation'Class)
    is
    begin
-      Op.Register;
+      Op.Register (Parallelize => False);
       Op.Assert (3 > 1);
       Op.Assert (5 <= 5);
       Op.Assert (2 < 3);

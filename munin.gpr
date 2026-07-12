@@ -6,11 +6,11 @@
 with "config/munin_config.gpr";
 project Munin is
 
-   for Source_Dirs use ("source/", "config/");
+   for Source_Dirs use ("source/**", "config/");
    for Object_Dir use "obj/" & Munin_Config.Build_Profile;
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("munin.adb");
+   for Main use ("munin-cli-main.adb");
 
    package Compiler is
       for Default_Switches ("Ada") use Munin_Config.Ada_Compiler_Switches;

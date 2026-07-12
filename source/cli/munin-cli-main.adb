@@ -3,7 +3,7 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
-procedure Munin is
+procedure Munin.CLI.Main is
 begin
    null;
-end Munin;
+end Munin.CLI.Main;

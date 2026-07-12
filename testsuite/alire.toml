@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Max Reznik <reznikmm@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 name = "testsuite"
 description = "Unit test suite for Munin core API"
 version = "0.1.0-dev"

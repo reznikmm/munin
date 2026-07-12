@@ -7,3 +7,11 @@
 > A lightweight developer companion for embedded Ravenscar applications.
 
 WORK IN PROGRESS!
+
+## Running Tests
+
+From the repository root, run:
+
+```bash
+alr test
+```

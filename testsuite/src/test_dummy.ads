@@ -1,7 +1,7 @@
---  SPDX-FileCopyrightText: 2026 Munin Developer
+--  SPDX-FileCopyrightText: 2026 Max Reznik <reznikmm@gmail.com>
 --
---  SPDX-License-Identifier: MIT OR Apache-2.0 WITH LLVM-exception
---
+--  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 --  Dummy test case for Munin core API (Iteration 1 smoke test)
 
 with Trendy_Test;
