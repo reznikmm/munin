@@ -3,6 +3,9 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
+with Munin.Contexts;
+pragma Unreferenced (Munin.Contexts);
+
 procedure Munin.CLI.Main is
 begin
    null;
