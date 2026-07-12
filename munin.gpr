@@ -20,6 +20,10 @@ project Munin is
       for Switches ("Ada") use ("-Es"); --  Symbolic traceback
    end Binder;
 
+   package Builder is
+      for Executable ("munin-cli-main.adb") use "munin";
+   end Builder;
+
    package Install is
       for Artifacts (".") use ("share");
    end Install;

@@ -55,6 +55,10 @@ package body Munin.Contexts is
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
       return Munin.Priorities.Optional_Priority;
 
+   procedure Append_Task_Unique
+      (Self : in out Context;
+       Item : Munin.Tasks.Task_Unit);
+
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type)
       return VSS.Strings.Virtual_String
@@ -269,6 +273,40 @@ package body Munin.Contexts is
         (Integer'Value (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int)));
    end Priority_For;
 
+   procedure Append_Task_Unique
+     (Self : in out Context;
+      Item : Munin.Tasks.Task_Unit)
+   is
+      use type VSS.Strings.Virtual_String;
+
+      Name     : constant VSS.Strings.Virtual_String :=
+        Munin.Tasks.Qualified_Name (Item);
+      Priority : constant Munin.Priorities.Optional_Priority :=
+        Munin.Tasks.Priority (Item);
+   begin
+      for Index in 1 .. Self.Task_Items.Last_Index loop
+         declare
+            Existing : constant Munin.Tasks.Task_Unit :=
+              Self.Task_Items.Element (Index);
+            Existing_Priority : constant Munin.Priorities.Optional_Priority :=
+              Munin.Tasks.Priority (Existing);
+         begin
+            if Munin.Tasks.Qualified_Name (Existing) = Name then
+               --  Keep a single entry per task name, preferring explicit
+               --  priority over default when both declarations are seen.
+               if not Existing_Priority.Has_Value and then Priority.Has_Value
+               then
+                  Self.Task_Items.Replace_Element (Index, Item);
+               end if;
+
+               return;
+            end if;
+         end;
+      end loop;
+
+      Self.Task_Items.Append (Item);
+   end Append_Task_Unique;
+
    procedure Load_Project
      (Self         : in out Context;
       Project_File : VSS.Strings.Virtual_String;
@@ -327,16 +365,16 @@ package body Munin.Contexts is
                   declare
                      Decl : constant Libadalang.Analysis.Basic_Decl :=
                        Node.As_Basic_Decl;
+                     Current : constant Munin.Tasks.Task_Unit :=
+                       Munin.Tasks.Create
+                         (Qualified_Name =>
+                            To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                          Priority       => Priority_For (Decl));
                   begin
-                     Self.Task_Items.Append
-                       (Munin.Tasks.Create
-                          (Qualified_Name =>
-                             To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                           Priority       => Priority_For (Decl)));
+                     Append_Task_Unique (Self, Current);
                   end;
 
-               elsif Kind = "ProtectedTypeDecl"
-                 or else Kind = "SingleProtectedDecl"
+               elsif Kind = "SingleProtectedDecl"
                then
                   declare
                      Decl : constant Libadalang.Analysis.Basic_Decl :=

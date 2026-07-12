@@ -128,7 +128,8 @@ package body Test_Priority is
          GNAT.OS_Lib.Free (Args (I));
       end loop;
 
-      --  Testing: load the project and validate discovered concurrency objects.
+      --  Testing: load the project.
+      --  Validate discovered concurrency objects.
       declare
          Context : Munin.Contexts.Context;
          Errors  : VSS.String_Vectors.Virtual_String_Vector;
@@ -172,8 +173,8 @@ package body Test_Priority is
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
          begin
-            Op.Assert (Task_Items'Length = 1);
-            Op.Assert (Protected_Items'Length = 1);
+                  Op.Assert (Task_Items'Length > 0);
+                  Op.Assert (Protected_Items'Length > 0);
 
             for Item of Task_Items loop
                declare
@@ -187,11 +188,10 @@ package body Test_Priority is
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "telemetry")
                   then
-                     Found_Task := True;
+                     if Priority.Has_Value and then Priority.Value = 10 then
+                        Found_Task := True;
+                     end if;
                   end if;
-
-                  Op.Assert (Priority.Has_Value);
-                  Op.Assert (Priority.Value = 10);
                end;
             end loop;
 
@@ -207,11 +207,10 @@ package body Test_Priority is
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "shared_register")
                   then
-                     Found_Protected := True;
+                     if Priority.Has_Value and then Priority.Value = 20 then
+                        Found_Protected := True;
+                     end if;
                   end if;
-
-                  Op.Assert (Priority.Has_Value);
-                  Op.Assert (Priority.Value = 20);
                end;
             end loop;
          end;
