@@ -1,0 +1,27 @@
+--  SPDX-FileCopyrightText: 2026 Max Reznik <reznikmm@gmail.com>
+--
+--  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+------------------------------------------------------------------
+
+with "config/munin_config.gpr";
+project Munin is
+
+   for Source_Dirs use ("source/", "config/");
+   for Object_Dir use "obj/" & Munin_Config.Build_Profile;
+   for Create_Missing_Dirs use "True";
+   for Exec_Dir use "bin";
+   for Main use ("munin.adb");
+
+   package Compiler is
+      for Default_Switches ("Ada") use Munin_Config.Ada_Compiler_Switches;
+   end Compiler;
+
+   package Binder is
+      for Switches ("Ada") use ("-Es"); --  Symbolic traceback
+   end Binder;
+
+   package Install is
+      for Artifacts (".") use ("share");
+   end Install;
+
+end Munin;
