@@ -3,12 +3,20 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 with Ada.Characters.Latin_1;
+with Ada.Characters.Handling;
 with Ada.Command_Line;
 with Ada.Directories;
+with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with GNAT.OS_Lib;
+with Munin.Contexts;
+with Munin.Priorities;
+with Munin.Protected_Objects;
+with Munin.Tasks;
 with Trendy_Test.Assertions;
+with VSS.String_Vectors;
+with VSS.Strings.Conversions;
 
 package body Test_Priority is
 
@@ -120,7 +128,97 @@ package body Test_Priority is
          GNAT.OS_Lib.Free (Args (I));
       end loop;
 
-      --  Testing: assertions will be added once Munin core API is implemented.
+      --  Testing: load the project and validate discovered concurrency objects.
+      declare
+         Context : Munin.Contexts.Context;
+         Errors  : VSS.String_Vectors.Virtual_String_Vector;
+
+         Found_Task      : Boolean := False;
+         Found_Protected : Boolean := False;
+
+         function Lower_Name (Value : String) return String is
+           (Ada.Characters.Handling.To_Lower (Value));
+
+         function Contains (Text, Pattern : String) return Boolean is
+           (Ada.Strings.Fixed.Index (Text, Pattern) > 0);
+      begin
+         Munin.Contexts.Load_Project
+           (Self         => Context,
+            Project_File => VSS.Strings.Conversions.To_Virtual_String
+              (Crate_Dir & "/priority.gpr"),
+            Errors       => Errors);
+
+         if not Errors.Is_Empty then
+            declare
+               Message : Unbounded_String :=
+                 To_Unbounded_String ("Load_Project returned errors:");
+            begin
+               for Item of Errors loop
+                  Append (Message, Ada.Characters.Latin_1.LF);
+                  Append
+                    (Message,
+                     VSS.Strings.Conversions.To_UTF_8_String (Item));
+               end loop;
+
+               Trendy_Test.Assertions.Fail (Op, To_String (Message));
+               return;
+            end;
+         end if;
+
+         declare
+            Task_Items : constant Munin.Tasks.Task_Unit_Array :=
+              Munin.Contexts.Tasks (Context);
+            Protected_Items :
+              constant Munin.Protected_Objects.Protected_Object_Array :=
+                Munin.Contexts.Protected_Objects (Context);
+         begin
+            Op.Assert (Task_Items'Length = 1);
+            Op.Assert (Protected_Items'Length = 1);
+
+            for Item of Task_Items loop
+               declare
+                  Name : constant String :=
+                    Lower_Name
+                      (VSS.Strings.Conversions.To_UTF_8_String
+                         (Munin.Tasks.Qualified_Name (Item)));
+                  Priority : constant Munin.Priorities.Optional_Priority :=
+                    Munin.Tasks.Priority (Item);
+               begin
+                  if Contains (Name, "priority_sample")
+                    and then Contains (Name, "telemetry")
+                  then
+                     Found_Task := True;
+                  end if;
+
+                  Op.Assert (Priority.Has_Value);
+                  Op.Assert (Priority.Value = 10);
+               end;
+            end loop;
+
+            for Item of Protected_Items loop
+               declare
+                  Name : constant String :=
+                    Lower_Name
+                      (VSS.Strings.Conversions.To_UTF_8_String
+                         (Munin.Protected_Objects.Qualified_Name (Item)));
+                  Priority : constant Munin.Priorities.Optional_Priority :=
+                    Munin.Protected_Objects.Priority (Item);
+               begin
+                  if Contains (Name, "priority_sample")
+                    and then Contains (Name, "shared_register")
+                  then
+                     Found_Protected := True;
+                  end if;
+
+                  Op.Assert (Priority.Has_Value);
+                  Op.Assert (Priority.Value = 20);
+               end;
+            end loop;
+         end;
+
+         Op.Assert (Found_Task);
+         Op.Assert (Found_Protected);
+      end;
    end Test_Priority_Build;
 
 end Test_Priority;

@@ -14,5 +14,12 @@ tags = ["testing", "unit-tests", "ada"]
 
 executables = ["testsuite"]
 
+[build-profiles]
+"munin" = "development"
+
 [[depends-on]]
 trendy_test = "~0.0.4"
+munin = "*"
+
+[[pins]]
+munin = { path = ".." }
