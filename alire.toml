@@ -16,3 +16,12 @@ development.optimization = ["-O0"]
 development.style_checks = ["-gnaty", "-gnaty-B"]
 development.contracts = "Yes"
 "*".debug_info = "Yes"
+
+[[depends-on]]
+gnat_native = "<16" # libgpr2 fails to compile with gcc 16.1
+libadalang = "^26.0.0"
+vss_extra = "^26.0.0"
+
+[[actions]]
+type = "test"
+command = ["alr", "-C", "testsuite", "run"]

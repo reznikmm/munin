@@ -14,3 +14,8 @@ jobs:
     - uses: alire-project/setup-alire@v6
     - name: Build project
       run: alr build
+    - name: Build project and run tests
+      run: alr test
+    - name: Dump log
+      if: ${{ failure() }}
+      run: cat alire/alr_test_local.log

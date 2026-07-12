@@ -1,0 +1,14 @@
+name = "testsuite"
+description = "Unit test suite for Munin core API"
+version = "0.1.0-dev"
+
+authors = ["Munin Developer"]
+maintainers = ["Munin Developer <dev@munin.local>"]
+licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+website = ""
+tags = ["testing", "unit-tests", "ada"]
+
+executables = ["testsuite"]
+
+[[depends-on]]
+trendy_test = "~0.0.4"
