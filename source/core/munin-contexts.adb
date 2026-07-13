@@ -3,53 +3,55 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
-with Ada.Containers.Indefinite_Vectors;
-with Ada.Characters.Handling;
+with Ada.Containers.Hashed_Sets;
 with Ada.Directories;
-with Ada.Strings.Fixed;
-with Ada.Strings.Unbounded;
 with Ada.Strings.UTF_Encoding;
-with Ada.Text_IO;
+with Ada.Exceptions;
 
 with GNATCOLL.GMP.Integers;
+with GPR2;
+with GPR2.Build.Source.Sets;
+with GPR2.Options;
+with GPR2.Project.Tree;
+with GPR2.Project.View;
 with Langkit_Support.Text;
 with Libadalang.Analysis;
 with Libadalang.Common;
 
 with Munin.Priorities;
 
+with VSS.Strings.Hash;
 with VSS.Strings.Conversions;
 
 package body Munin.Contexts is
 
-   package String_Vectors is new Ada.Containers.Indefinite_Vectors
-     (Index_Type   => Positive,
-      Element_Type => String);
+   use type VSS.Strings.Virtual_String;
+
+   package Source_Sets is new Ada.Containers.Hashed_Sets
+       (Element_Type        => VSS.Strings.Virtual_String,
+        Hash                => VSS.Strings.Hash,
+        Equivalent_Elements => VSS.Strings."=");
 
    use type Ada.Directories.File_Kind;
    use type Libadalang.Common.Visit_Status;
 
    function To_Virtual_String
-     (Value : Langkit_Support.Text.Text_Type)
-      return VSS.Strings.Virtual_String;
+      (Value : Langkit_Support.Text.Text_Type)
+       return VSS.Strings.Virtual_String;
 
    procedure Append_Error
-     (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
-      Value  : String);
+      (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
+       Value  : String);
 
-   function Ends_With (Value, Suffix : String) return Boolean;
+   procedure Load_Project_Tree
+      (Project_File : String;
+       Tree         : in out GPR2.Project.Tree.Object;
+       Errors       : in out VSS.String_Vectors.Virtual_String_Vector);
 
-   function Has_Ada_Extension (File_Name : String) return Boolean;
-
-   function Extract_Quoted_Values
-     (Text : String) return String_Vectors.Vector;
-
-   function Source_Directories
-     (Project_File : String) return String_Vectors.Vector;
-
-   procedure Collect_Ada_Sources
-     (Directory : String;
-      Result    : in out String_Vectors.Vector);
+   procedure Collect_Project_Ada_Sources
+      (Tree   : GPR2.Project.Tree.Object;
+       Result : in out Source_Sets.Set;
+       Errors : in out VSS.String_Vectors.Virtual_String_Vector);
 
    function Priority_For
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
@@ -76,178 +78,90 @@ package body Munin.Contexts is
       Errors.Append (VSS.Strings.Conversions.To_Virtual_String (Value));
    end Append_Error;
 
-   function Ends_With (Value, Suffix : String) return Boolean is
-   begin
-      if Value'Length < Suffix'Length then
-         return False;
-      end if;
-
-      return Value (Value'Last - Suffix'Length + 1 .. Value'Last) = Suffix;
-   end Ends_With;
-
-   function Has_Ada_Extension (File_Name : String) return Boolean is
-      Lower : constant String := Ada.Characters.Handling.To_Lower (File_Name);
-   begin
-      return Ends_With (Lower, ".adb")
-        or else Ends_With (Lower, ".ads")
-        or else Ends_With (Lower, ".ada")
-        or else Ends_With (Lower, ".spc")
-        or else Ends_With (Lower, ".bdy");
-   end Has_Ada_Extension;
-
-   function Extract_Quoted_Values
-     (Text : String) return String_Vectors.Vector
+   procedure Load_Project_Tree
+     (Project_File : String;
+      Tree         : in out GPR2.Project.Tree.Object;
+      Errors       : in out VSS.String_Vectors.Virtual_String_Vector)
    is
-      Result   : String_Vectors.Vector;
-      In_Quote : Boolean := False;
-      Start    : Positive := Text'First;
+      Options : GPR2.Options.Object := GPR2.Options.Empty_Options;
    begin
-      for Index in Text'Range loop
-         if Text (Index) = '"' then
-            if In_Quote then
-               Result.Append (Text (Start .. Index - 1));
-               In_Quote := False;
-            else
-               In_Quote := True;
-               Start := Index + 1;
-            end if;
-         end if;
-      end loop;
+      GPR2.Options.Add_Switch
+        (Options,
+         Switch => GPR2.Options.P,
+         Param  => Project_File);
 
-      return Result;
-   end Extract_Quoted_Values;
+      if Tree.Load
+        (Options              => Options,
+         With_Runtime         => True,
+         Artifacts_Info_Level => GPR2.Sources_Units,
+         Check_Drivers        => False)
+      then
+         null;  --  Load is fine, do nothing
 
-   function Source_Directories
-     (Project_File : String) return String_Vectors.Vector
-   is
-      use Ada.Strings.Unbounded;
-
-      File        : Ada.Text_IO.File_Type;
-      Statement   : Unbounded_String;
-      In_Clause   : Boolean := False;
-      Result      : String_Vectors.Vector;
-      Project_Dir : constant String :=
-        Ada.Directories.Containing_Directory (Project_File);
-   begin
-      Ada.Text_IO.Open (File, Ada.Text_IO.In_File, Project_File);
-
-      while not Ada.Text_IO.End_Of_File (File) loop
-         declare
-            Line       : constant String := Ada.Text_IO.Get_Line (File);
-            Lower_Line : constant String :=
-              Ada.Characters.Handling.To_Lower (Line);
-         begin
-            if not In_Clause
-              and then Ada.Strings.Fixed.Index
-                (Lower_Line, "for source_dirs use") > 0
-            then
-               In_Clause := True;
-            end if;
-
-            if In_Clause then
-               Append (Statement, Line);
-               Append (Statement, " ");
-
-               exit when Ada.Strings.Fixed.Index (Line, ";") > 0;
-            end if;
-         end;
-      end loop;
-
-      Ada.Text_IO.Close (File);
-
-      if Length (Statement) = 0 then
-         Result.Append (Project_Dir);
-         return Result;
-      end if;
-
-      declare
-         Quoted : constant String_Vectors.Vector :=
-           Extract_Quoted_Values (To_String (Statement));
-      begin
-         for Item of Quoted loop
-            declare
-               Full : constant String :=
-                 (if Item'Length > 0
-                    and then Item (Item'First) = '/'
-                  then
-                     Item
-                  else
-                     Ada.Directories.Compose (Project_Dir, Item));
-            begin
-               if Ada.Directories.Exists (Full)
-                 and then
-                   Ada.Directories.Kind (Full) = Ada.Directories.Directory
-               then
-                  Result.Append (Full);
-               end if;
-            end;
+      elsif Tree.Is_Defined and then Tree.Has_Messages then
+         for Message of Tree.Log_Messages.all loop
+            Append_Error
+              (Errors,
+               Message.Format (Full_Path_Name => True));
          end loop;
-      end;
-
-      if Result.Is_Empty then
-         Result.Append (Project_Dir);
+      else
+         Append_Error
+           (Errors,
+            "unable to load project file: " & Project_File);
       end if;
 
-      return Result;
-
    exception
-      when others =>
-         if Ada.Text_IO.Is_Open (File) then
-            Ada.Text_IO.Close (File);
-         end if;
+      when E : others =>
+         Append_Error
+           (Errors,
+            "failed to load project file '"
+            & Project_File
+            & "': "
+            & Ada.Exceptions.Exception_Message (E));
+   end Load_Project_Tree;
 
-         return Result : String_Vectors.Vector do
-            Result.Append (Project_Dir);
-         end return;
-   end Source_Directories;
-
-   procedure Collect_Ada_Sources
-     (Directory : String;
-      Result    : in out String_Vectors.Vector)
+   procedure Collect_Project_Ada_Sources
+     (Tree   : GPR2.Project.Tree.Object;
+      Result : in out Source_Sets.Set;
+      Errors : in out VSS.String_Vectors.Virtual_String_Vector)
    is
-      Search     : Ada.Directories.Search_Type;
-      Dir_Entry  : Ada.Directories.Directory_Entry_Type;
-      Has_Search : Boolean := False;
-   begin
-      Ada.Directories.Start_Search
-        (Search    => Search,
-         Directory => Directory,
-         Pattern   => "",
-         Filter    =>
-           (Ada.Directories.Ordinary_File => True,
-            Ada.Directories.Directory     => True,
-            Ada.Directories.Special_File  => False));
-      Has_Search := True;
+      procedure Add_Sources_From_View (View : GPR2.Project.View.Object);
 
-      while Ada.Directories.More_Entries (Search) loop
-         Ada.Directories.Get_Next_Entry (Search, Dir_Entry);
-
-         declare
-            Name : constant String := Ada.Directories.Simple_Name (Dir_Entry);
-            Full : constant String := Ada.Directories.Full_Name (Dir_Entry);
-         begin
-            if Ada.Directories.Kind (Dir_Entry)
-              = Ada.Directories.Directory
+      procedure Add_Sources_From_View (View : GPR2.Project.View.Object) is
+         Sources : constant GPR2.Build.Source.Sets.Object := View.Sources;
+         use type GPR2.Language_Id;
+      begin
+         for Source of Sources loop
+            if Source.Language = GPR2.Ada_Language
+              and then Source.Path_Name.Has_Value
             then
-               if Name /= "." and then Name /= ".." then
-                  Collect_Ada_Sources (Full, Result);
-               end if;
-
-            elsif Has_Ada_Extension (Name) then
-               Result.Append (Full);
+               Result.Include
+                 (VSS.Strings.Conversions.To_Virtual_String
+                    (String (Source.Path_Name.Value)));
             end if;
-         end;
+         end loop;
+      end Add_Sources_From_View;
+
+   begin
+      --  Process the closure of the root project, including aggregated
+      --  libraries and projects that they might extend.
+      for View of Tree.Root_Project.Closure
+        (Include_Self       => True,
+         Include_Extended   => True,
+         Include_Aggregated => True)
+      loop
+         if not View.Is_Runtime then
+            Add_Sources_From_View (View);
+         end if;
       end loop;
 
-      Ada.Directories.End_Search (Search);
-      Has_Search := False;
-
    exception
-      when others =>
-         if Has_Search then
-            Ada.Directories.End_Search (Search);
-         end if;
-   end Collect_Ada_Sources;
+      when E : others =>
+         Append_Error
+           (Errors,
+            "failed to collect project sources: "
+            & Ada.Exceptions.Exception_Message (E));
+   end Collect_Project_Ada_Sources;
 
    function Priority_For
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
@@ -256,31 +170,49 @@ package body Munin.Contexts is
       Aspect_Name : constant Langkit_Support.Text.Unbounded_Text_Type :=
         Langkit_Support.Text.To_Unbounded_Text
           (Langkit_Support.Text.To_Text ("Priority"));
+
       Expr        : constant Libadalang.Analysis.Expr :=
         Decl.P_Get_Aspect_Spec_Expr (Aspect_Name);
+
+      function Evaluated_Priority return Munin.Priorities.Optional_Priority;
+
+      function Evaluated_Priority return Munin.Priorities.Optional_Priority is
+        (Munin.Priorities.Explicit_Priority
+          (Integer'Value (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int))));
    begin
       if Expr.Is_Null then
          return Munin.Priorities.Default_Priority;
       end if;
 
-      if not Expr.P_Is_Static_Expr then
-         raise Constraint_Error with
-           "Priority aspect must be static: "
-           & String (Langkit_Support.Text.To_UTF8 (Expr.Text));
+      if Expr.P_Is_Static_Expr then
+         return Evaluated_Priority;
       end if;
 
-      return Munin.Priorities.Explicit_Priority
-        (Integer'Value (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int)));
+      --  Libadalang can evaluate some target-dependent predefined attributes
+      --  even when the static-expression predicate is conservative.
+      return Evaluated_Priority;
+
+   exception
+      when E : others =>
+         raise Constraint_Error with
+           "Priority aspect must be static at "
+           & String
+               (Langkit_Support.Text.To_UTF8
+                  (Libadalang.Analysis.Full_Sloc_Image (Expr)))
+           & ": "
+           & String (Langkit_Support.Text.To_UTF8 (Expr.Text))
+           & " ("
+           & Ada.Exceptions.Exception_Message (E)
+           & ")";
    end Priority_For;
 
    procedure Append_Task_Unique
      (Self : in out Context;
       Item : Munin.Tasks.Task_Unit)
    is
-      use type VSS.Strings.Virtual_String;
-
       Name     : constant VSS.Strings.Virtual_String :=
         Munin.Tasks.Qualified_Name (Item);
+
       Priority : constant Munin.Priorities.Optional_Priority :=
         Munin.Tasks.Priority (Item);
    begin
@@ -288,6 +220,7 @@ package body Munin.Contexts is
          declare
             Existing : constant Munin.Tasks.Task_Unit :=
               Self.Task_Items.Element (Index);
+
             Existing_Priority : constant Munin.Priorities.Optional_Priority :=
               Munin.Tasks.Priority (Existing);
          begin
@@ -314,9 +247,8 @@ package body Munin.Contexts is
    is
       Path : constant String :=
         VSS.Strings.Conversions.To_UTF_8_String (Project_File);
-      Context : constant Libadalang.Analysis.Analysis_Context :=
-        Libadalang.Analysis.Create_Context;
-      Files   : String_Vectors.Vector;
+      Tree    : GPR2.Project.Tree.Object;
+      Files   : Source_Sets.Set;
    begin
       Errors.Clear;
       Self.Loaded_Project := Project_File;
@@ -338,70 +270,96 @@ package body Munin.Contexts is
          return;
       end if;
 
-      for Source_Dir of Source_Directories (Path) loop
-         Collect_Ada_Sources (Source_Dir, Files);
-      end loop;
+      Load_Project_Tree (Path, Tree, Errors);
 
-      for File_Name of Files loop
-         declare
-            Unit : constant Libadalang.Analysis.Analysis_Unit :=
-              Context.Get_From_File (File_Name);
-            Root : constant Libadalang.Analysis.Ada_Node := Unit.Root;
+      if not Errors.Is_Empty then
+         return;
+      end if;
 
-            function Visit
-              (Node : Libadalang.Analysis.Ada_Node'Class)
-               return Libadalang.Common.Visit_Status;
+      Collect_Project_Ada_Sources (Tree, Files, Errors);
 
-            function Visit
-              (Node : Libadalang.Analysis.Ada_Node'Class)
-               return Libadalang.Common.Visit_Status
-            is
-               Kind : constant String := Libadalang.Analysis.Kind_Name (Node);
+      if not Errors.Is_Empty then
+         return;
+      end if;
+
+      declare
+         Context : constant Libadalang.Analysis.Analysis_Context :=
+           Libadalang.Analysis.Create_Context_From_Project (Tree);
+      begin
+         for File_Name of Files loop
+            declare
+               File_Path : constant String :=
+                  VSS.Strings.Conversions.To_UTF_8_String (File_Name);
+               Unit : constant Libadalang.Analysis.Analysis_Unit :=
+                        Context.Get_From_File (File_Path);
+               Root : constant Libadalang.Analysis.Ada_Node := Unit.Root;
+
+               function Visit
+                 (Node : Libadalang.Analysis.Ada_Node'Class)
+                  return Libadalang.Common.Visit_Status;
+
+               function Visit
+                 (Node : Libadalang.Analysis.Ada_Node'Class)
+                  return Libadalang.Common.Visit_Status
+               is
+                           Kind : constant String :=
+                              Libadalang.Analysis.Kind_Name (Node);
+               begin
+                  if Kind = "TaskTypeDecl"
+                    or else Kind = "SingleTaskDecl"
+                    or else Kind = "SingleTaskTypeDecl"
+                  then
+                     declare
+                        Decl : constant Libadalang.Analysis.Basic_Decl :=
+                          Node.As_Basic_Decl;
+                        Current : constant Munin.Tasks.Task_Unit :=
+                          Munin.Tasks.Create
+                            (Qualified_Name =>
+                               To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                             Priority       => Priority_For (Decl));
+                     begin
+                        Append_Task_Unique (Self, Current);
+                     end;
+
+                  elsif Kind = "SingleProtectedDecl"
+                  then
+                     declare
+                        Decl : constant Libadalang.Analysis.Basic_Decl :=
+                          Node.As_Basic_Decl;
+                     begin
+                        Self.Protected_Items.Append
+                          (Munin.Protected_Objects.Create
+                             (Qualified_Name =>
+                                To_Virtual_String
+                                  (Decl.P_Fully_Qualified_Name),
+                              Priority       => Priority_For (Decl)));
+                     end;
+                  end if;
+
+                  return Libadalang.Common.Into;
+               end Visit;
             begin
-               if Kind = "TaskTypeDecl"
-                 or else Kind = "SingleTaskDecl"
-                 or else Kind = "SingleTaskTypeDecl"
-               then
-                  declare
-                     Decl : constant Libadalang.Analysis.Basic_Decl :=
-                       Node.As_Basic_Decl;
-                     Current : constant Munin.Tasks.Task_Unit :=
-                       Munin.Tasks.Create
-                         (Qualified_Name =>
-                            To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                          Priority       => Priority_For (Decl));
-                  begin
-                     Append_Task_Unique (Self, Current);
-                  end;
-
-               elsif Kind = "SingleProtectedDecl"
-               then
-                  declare
-                     Decl : constant Libadalang.Analysis.Basic_Decl :=
-                       Node.As_Basic_Decl;
-                  begin
-                     Self.Protected_Items.Append
-                       (Munin.Protected_Objects.Create
-                          (Qualified_Name =>
-                             To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                           Priority       => Priority_For (Decl)));
-                  end;
+               if Unit.Has_Diagnostics then
+                  for D of Unit.Diagnostics loop
+                     Append_Error (Errors, Unit.Format_GNU_Diagnostic (D));
+                  end loop;
                end if;
 
-               return Libadalang.Common.Into;
-            end Visit;
-         begin
-            if Unit.Has_Diagnostics then
-               for D of Unit.Diagnostics loop
-                  Append_Error (Errors, Unit.Format_GNU_Diagnostic (D));
-               end loop;
-            end if;
+               if not Root.Is_Null then
+                  Libadalang.Analysis.Traverse (Root, Visit'Access);
+               end if;
+            end;
+         end loop;
 
-            if not Root.Is_Null then
-               Libadalang.Analysis.Traverse (Root, Visit'Access);
-            end if;
-         end;
-      end loop;
+      exception
+         when E : others =>
+            Append_Error
+              (Errors,
+               "failed to initialize analysis context for '"
+               & Path
+               & "': "
+               & Ada.Exceptions.Exception_Message (E));
+      end;
    end Load_Project;
 
    function Tasks (Self : Context) return Munin.Tasks.Task_Unit_Array is

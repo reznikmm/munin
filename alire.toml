@@ -12,6 +12,7 @@ tags = ["embedded", "analyzer", "realtime"]
 executables = ["munin"]
 
 [build-switches]
+"*".Ada_Version = "Ada2022"
 development.optimization = ["-O0"]
 development.style_checks = ["-gnaty", "-gnaty-B"]
 development.contracts = "Yes"
@@ -24,4 +25,4 @@ vss_extra = "^26.0.0"
 
 [[actions]]
 type = "test"
-command = ["alr", "-C", "testsuite", "run"]
+command = ["testsuite/run.sh"]

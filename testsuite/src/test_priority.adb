@@ -91,6 +91,7 @@ package body Test_Priority is
       Result  : Integer;
    begin
       Op.Register (Parallelize => False);
+
       --  Setup: attempt to build the priority testcase crate.
       --  Requires gnat_arm_elf cross-compiler.
       Args :=
@@ -173,8 +174,8 @@ package body Test_Priority is
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
          begin
-                  Op.Assert (Task_Items'Length > 0);
-                  Op.Assert (Protected_Items'Length > 0);
+            Op.Assert (Task_Items'Length > 0);
+            Op.Assert (Protected_Items'Length > 0);
 
             for Item of Task_Items loop
                declare
@@ -188,7 +189,7 @@ package body Test_Priority is
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "telemetry")
                   then
-                     if Priority.Has_Value and then Priority.Value = 10 then
+                     if Priority.Has_Value and then Priority.Value = 32 then
                         Found_Task := True;
                      end if;
                   end if;

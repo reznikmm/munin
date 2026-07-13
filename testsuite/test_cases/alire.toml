@@ -2,13 +2,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-name = "priority"
-description = "Testcase: one task and one protected object with explicit priorities"
+name = "test_cases"
+description = "test cases crate"
 version = "0.1.0-dev"
 
-licenses = "MIT OR Apache-2.0 WITH LLVM-exception"
+licenses = "Apache-2.0 WITH LLVM-exception"
 
-executables = ["priority"]
+project-files = ["priority/priority.gpr"]
+
+executables = []
 
 [[depends-on]]
 light_tasking_rp2040 = "15.4.0"

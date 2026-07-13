@@ -9,9 +9,9 @@
 
 package Priority_Sample is
 
-   --  A single task with an explicit priority.
+    --  A single task with a target-sensitive priority.
    task Telemetry
-     with Priority => 10;
+       with Priority => Standard'Address_Size;
 
    --  A protected object with an explicit priority.
    protected Shared_Register
