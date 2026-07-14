@@ -10,6 +10,12 @@
 with Priority_Sample;
 pragma Unreferenced (Priority_Sample);
 
+with Gen_Pkg;
+pragma Unreferenced (Gen_Pkg);
+
+with Readers_24;
+pragma Unreferenced (Readers_24);
+
 procedure Priority is
 begin
    null;

@@ -5,7 +5,6 @@
 
 with Ada.Containers.Hashed_Sets;
 with Ada.Directories;
-with Ada.Strings.UTF_Encoding;
 with Ada.Exceptions;
 
 with GNATCOLL.GMP.Integers;
@@ -33,6 +32,7 @@ package body Munin.Contexts is
         Equivalent_Elements => VSS.Strings."=");
 
    use type Ada.Directories.File_Kind;
+   use type Libadalang.Common.Ada_Node_Kind_Type;
    use type Libadalang.Common.Visit_Status;
 
    function To_Virtual_String
@@ -63,13 +63,8 @@ package body Munin.Contexts is
 
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type)
-      return VSS.Strings.Virtual_String
-   is
-      UTF8 : constant Ada.Strings.UTF_Encoding.UTF_8_String :=
-        Langkit_Support.Text.To_UTF8 (Value);
-   begin
-      return VSS.Strings.Conversions.To_Virtual_String (String (UTF8));
-   end To_Virtual_String;
+      return VSS.Strings.Virtual_String is
+        (VSS.Strings.To_Virtual_String (Value));
 
    procedure Append_Error
      (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
@@ -285,6 +280,10 @@ package body Munin.Contexts is
       declare
          Context : constant Libadalang.Analysis.Analysis_Context :=
            Libadalang.Analysis.Create_Context_From_Project (Tree);
+         subtype Generic_Package_Decl_Node is
+           Libadalang.Analysis.Generic_Package_Decl;
+         subtype Generic_Package_Internal_Node is
+           Libadalang.Analysis.Generic_Package_Internal;
       begin
          for File_Name of Files loop
             declare
@@ -293,6 +292,111 @@ package body Munin.Contexts is
                Unit : constant Libadalang.Analysis.Analysis_Unit :=
                         Context.Get_From_File (File_Path);
                Root : constant Libadalang.Analysis.Ada_Node := Unit.Root;
+               Instantiation_Depth : Natural := 0;
+
+               procedure Add_Task
+                 (Decl : Libadalang.Analysis.Basic_Decl'Class);
+
+               procedure Add_Protected
+                 (Decl : Libadalang.Analysis.Basic_Decl'Class);
+
+               procedure Process_Instance_Node
+                 (Node : Libadalang.Analysis.Ada_Node'Class);
+
+               procedure Add_Task
+                 (Decl : Libadalang.Analysis.Basic_Decl'Class)
+               is
+               begin
+                  declare
+                     Current : constant Munin.Tasks.Task_Unit :=
+                       Munin.Tasks.Create
+                         (Qualified_Name =>
+                            To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                          Priority       => Priority_For (Decl));
+                  begin
+                     Append_Task_Unique (Self, Current);
+                  exception
+                     when Constraint_Error =>
+                        --  Generic formal parameters cannot be statically
+                        --  evaluated. Skip this task in instantiation context.
+                        null;
+                  end;
+               exception
+                  when Constraint_Error =>
+                     --  Catch exceptions from property access or expression
+                     --  evaluation in generic contexts.
+                     null;
+               end Add_Task;
+
+               procedure Add_Protected
+                 (Decl : Libadalang.Analysis.Basic_Decl'Class)
+               is
+               begin
+                  declare
+                  begin
+                     Self.Protected_Items.Append
+                       (Munin.Protected_Objects.Create
+                          (Qualified_Name =>
+                             To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                           Priority       => Priority_For (Decl)));
+                  exception
+                     when Constraint_Error =>
+                        --  Generic formal parameters cannot be statically
+                        --  evaluated. Skip this protected object in
+                        --  instantiation context.
+                        null;
+                  end;
+               exception
+                  when Constraint_Error =>
+                     --  Catch exceptions from property access or expression
+                     --  evaluation in generic contexts.
+                     null;
+               end Add_Protected;
+
+               procedure Process_Instance_Node
+                 (Node : Libadalang.Analysis.Ada_Node'Class)
+               is
+                  Node_Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
+                    Libadalang.Analysis.Kind (Node);
+               begin
+                  if Node_Kind in Libadalang.Common.Ada_Task_Type_Decl
+                    | Libadalang.Common.Ada_Single_Task_Decl
+                    | Libadalang.Common.Ada_Single_Task_Type_Decl
+                  then
+                     Add_Task (Node.As_Basic_Decl);
+
+                  elsif Node_Kind = Libadalang.Common.Ada_Single_Protected_Decl
+                  then
+                     Add_Protected (Node.As_Basic_Decl);
+
+                  elsif Node_Kind =
+                    Libadalang.Common.Ada_Generic_Package_Instantiation
+                  then
+                     --  Skip nested instantiations inside generic bodies. Only
+                     --  analyze instantiations at the top level (outside any
+                     --  generic scope).
+                     return;
+                  end if;
+
+                  for Child of Node.Children loop
+                     if not Child.Is_Null then
+                        Process_Instance_Node (Child);
+                     end if;
+                  end loop;
+
+               exception
+                  when Constraint_Error =>
+                     --  Tasks or protected objects with non-static priorities
+                     --  (e.g., using generic formal parameters) cannot be
+                     --  analyzed. Skip this node.
+                     null;
+                  when Libadalang.Common.Property_Error =>
+                     --  Some synthetic nodes in instantiated generic trees can
+                     --  trigger invalid property requests in Libadalang.
+                     --  Skip only the failing subtree and keep scanning
+                     --  siblings.
+                     null;
+               end Process_Instance_Node;
 
                function Visit
                  (Node : Libadalang.Analysis.Ada_Node'Class)
@@ -302,38 +406,124 @@ package body Munin.Contexts is
                  (Node : Libadalang.Analysis.Ada_Node'Class)
                   return Libadalang.Common.Visit_Status
                is
-                           Kind : constant String :=
-                              Libadalang.Analysis.Kind_Name (Node);
+                  Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
+                    Libadalang.Analysis.Kind (Node);
+
+                  --  Check if Node is inside a generic package template
+                  function Is_Inside_Generic_Template return Boolean;
+
+                  function Is_Inside_Generic_Template return Boolean is
+                     Ancestor : Libadalang.Analysis.Ada_Node :=
+                       Node.Parent.As_Ada_Node;
+                  begin
+                     while not Ancestor.Is_Null loop
+                        if Libadalang.Analysis.Kind (Ancestor) =
+                          Libadalang.Common.Ada_Generic_Package_Decl
+                        then
+                           return True;
+                        end if;
+                        Ancestor := Ancestor.Parent.As_Ada_Node;
+                     end loop;
+                     return False;
+                  end Is_Inside_Generic_Template;
                begin
-                  if Kind = "TaskTypeDecl"
-                    or else Kind = "SingleTaskDecl"
-                    or else Kind = "SingleTaskTypeDecl"
+                  if Kind = Libadalang.Common.Ada_Generic_Package_Instantiation
                   then
-                     declare
-                        Decl : constant Libadalang.Analysis.Basic_Decl :=
-                          Node.As_Basic_Decl;
-                        Current : constant Munin.Tasks.Task_Unit :=
-                          Munin.Tasks.Create
-                            (Qualified_Name =>
-                               To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                             Priority       => Priority_For (Decl));
+                     --  Skip nested instantiations and instantiations
+                     --  inside generic templates: only process top-level
+                     --  instantiations outside of any generic scope.
+                     if Instantiation_Depth > 0
+                       or else Is_Inside_Generic_Template
+                     then
+                        return Libadalang.Common.Over;
+                     end if;
+
                      begin
-                        Append_Task_Unique (Self, Current);
+                        declare
+                           Inst : constant
+                             Libadalang.Analysis.
+                               Generic_Package_Instantiation :=
+                             Node.As_Generic_Package_Instantiation;
+                           Designated : constant
+                             Libadalang.Analysis.Generic_Decl :=
+                             Inst.P_Designated_Generic_Decl;
+                        begin
+                           if not Designated.Is_Null
+                             and then Designated.Kind =
+                               Libadalang.Common.Ada_Generic_Package_Decl
+                           then
+                              Instantiation_Depth := Instantiation_Depth + 1;
+                              begin
+                                 declare
+                                    Generic_Package : constant
+                                      Generic_Package_Decl_Node :=
+                                        Designated.As_Generic_Package_Decl;
+
+                                    Package_Decl : constant
+                                      Generic_Package_Internal_Node :=
+                                        Generic_Package.F_Package_Decl;
+                                 begin
+                                    Process_Instance_Node (Package_Decl);
+                                 end;
+                              exception
+                                 when Libadalang.Common.Property_Error =>
+                                    null;
+                                 when others =>
+                                    Instantiation_Depth :=
+                                      Instantiation_Depth - 1;
+                                    raise;
+                              end;
+                              Instantiation_Depth := Instantiation_Depth - 1;
+                           end if;
+                        end;
+                     exception
+                        when Libadalang.Common.Property_Error =>
+                           --  Some instantiation node properties are not
+                           --  available or invalid; skip this instantiation.
+                           null;
                      end;
 
-                  elsif Kind = "SingleProtectedDecl"
+                     return Libadalang.Common.Over;
+
+                  elsif Kind = Libadalang.Common.Ada_Generic_Package_Decl
+                    and then Instantiation_Depth = 0
                   then
-                     declare
-                        Decl : constant Libadalang.Analysis.Basic_Decl :=
-                          Node.As_Basic_Decl;
+                     --  Skip generic package specs in normal traversal. Their
+                     --  instantiated declarations are traversed via a generic
+                     --  package instantiation.
+                     return Libadalang.Common.Over;
+
+                  elsif Kind = Libadalang.Common.Ada_Package_Body
+                    and then Instantiation_Depth = 0
+                  then
+                     --  Skip bodies of generic packages. Only instantiations
+                     --  trigger analysis of a generic package's contents.
                      begin
-                        Self.Protected_Items.Append
-                          (Munin.Protected_Objects.Create
-                             (Qualified_Name =>
-                                To_Virtual_String
-                                  (Decl.P_Fully_Qualified_Name),
-                              Priority       => Priority_For (Decl)));
+                        declare
+                           Spec : constant Libadalang.Analysis.Basic_Decl :=
+                             Node.As_Package_Body.P_Decl_Part;
+                        begin
+                           if not Spec.Is_Null
+                             and then Libadalang.Analysis.Kind (Spec) =
+                               Libadalang.Common.Ada_Generic_Package_Internal
+                           then
+                              return Libadalang.Common.Over;
+                           end if;
+                        end;
+                     exception
+                        when Libadalang.Common.Property_Error =>
+                           null;
                      end;
+
+                  elsif Kind = Libadalang.Common.Ada_Task_Type_Decl
+                    or else Kind = Libadalang.Common.Ada_Single_Task_Decl
+                    or else Kind = Libadalang.Common.Ada_Single_Task_Type_Decl
+                  then
+                     Add_Task (Node.As_Basic_Decl);
+
+                  elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl
+                  then
+                     Add_Protected (Node.As_Basic_Decl);
                   end if;
 
                   return Libadalang.Common.Into;

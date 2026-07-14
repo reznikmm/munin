@@ -137,6 +137,7 @@ package body Test_Priority is
 
          Found_Task      : Boolean := False;
          Found_Protected : Boolean := False;
+         Found_Generic_Task : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -192,6 +193,11 @@ package body Test_Priority is
                      if Priority.Has_Value and then Priority.Value = 32 then
                         Found_Task := True;
                      end if;
+
+                  elsif Contains (Name, "readers_24") then
+                     if Priority.Has_Value and then Priority.Value = 24 then
+                        Found_Generic_Task := True;
+                     end if;
                   end if;
                end;
             end loop;
@@ -218,6 +224,7 @@ package body Test_Priority is
 
          Op.Assert (Found_Task);
          Op.Assert (Found_Protected);
+         Op.Assert (Found_Generic_Task);
       end;
    end Test_Priority_Build;
 
