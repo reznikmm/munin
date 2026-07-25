@@ -11,16 +11,16 @@ package Munin.Protected_Objects is
 
    type Protected_Object is new Program_Units.Program_Unit with private;
 
-   overriding function Qualified_Name (Self : Protected_Object)
-     return VSS.Strings.Virtual_String;
+   overriding
+   function Qualified_Name
+     (Self : Protected_Object) return VSS.Strings.Virtual_String;
 
    function Priority
      (Self : Protected_Object'Class) return Priorities.Optional_Priority;
 
    function Create
      (Qualified_Name : VSS.Strings.Virtual_String;
-      Priority       : Priorities.Optional_Priority)
-      return Protected_Object;
+      Priority       : Priorities.Optional_Priority) return Protected_Object;
 
    type Protected_Object_Array is
      array (Positive range <>) of Protected_Object;
@@ -34,17 +34,16 @@ private
 
    function Create
      (Qualified_Name : VSS.Strings.Virtual_String;
-      Priority       : Priorities.Optional_Priority)
-      return Protected_Object is
-        (Qualified_Name    => Qualified_Name,
-         Assigned_Priority => Priority);
+      Priority       : Priorities.Optional_Priority) return Protected_Object
+   is (Qualified_Name => Qualified_Name, Assigned_Priority => Priority);
 
    function Priority
-     (Self : Protected_Object'Class) return Priorities.Optional_Priority is
-       (Self.Assigned_Priority);
+     (Self : Protected_Object'Class) return Priorities.Optional_Priority
+   is (Self.Assigned_Priority);
 
-   overriding function Qualified_Name (Self : Protected_Object)
-     return VSS.Strings.Virtual_String is
-       (Self.Qualified_Name);
+   overriding
+   function Qualified_Name
+     (Self : Protected_Object) return VSS.Strings.Virtual_String
+   is (Self.Qualified_Name);
 
 end Munin.Protected_Objects;

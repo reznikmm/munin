@@ -11,16 +11,16 @@ package Munin.Tasks is
 
    type Task_Unit is new Program_Units.Program_Unit with private;
 
-   overriding function Qualified_Name (Self : Task_Unit)
-     return VSS.Strings.Virtual_String;
+   overriding
+   function Qualified_Name
+     (Self : Task_Unit) return VSS.Strings.Virtual_String;
 
-   function Priority (Self : Task_Unit'Class)
-     return Priorities.Optional_Priority;
+   function Priority
+     (Self : Task_Unit'Class) return Priorities.Optional_Priority;
 
    function Create
      (Qualified_Name : VSS.Strings.Virtual_String;
-      Priority       : Priorities.Optional_Priority)
-      return Task_Unit;
+      Priority       : Priorities.Optional_Priority) return Task_Unit;
 
    type Task_Unit_Array is array (Positive range <>) of Task_Unit;
 
@@ -33,16 +33,14 @@ private
 
    function Create
      (Qualified_Name : VSS.Strings.Virtual_String;
-      Priority       : Priorities.Optional_Priority)
-      return Task_Unit is
-        (Qualified_Name    => Qualified_Name,
-         Assigned_Priority => Priority);
+      Priority       : Priorities.Optional_Priority) return Task_Unit
+   is (Qualified_Name => Qualified_Name, Assigned_Priority => Priority);
 
    function Priority
-     (Self : Task_Unit'Class) return Priorities.Optional_Priority is
-       (Self.Assigned_Priority);
+     (Self : Task_Unit'Class) return Priorities.Optional_Priority
+   is (Self.Assigned_Priority);
 
    function Qualified_Name (Self : Task_Unit) return VSS.Strings.Virtual_String
-     is (Self.Qualified_Name);
+   is (Self.Qualified_Name);
 
 end Munin.Tasks;

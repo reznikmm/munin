@@ -11,6 +11,7 @@ package Munin.Priorities is
       case Has_Value is
          when False =>
             null;
+
          when True =>
             Value : Priority_Value;
       end case;
@@ -18,8 +19,7 @@ package Munin.Priorities is
 
    Default_Priority : constant Optional_Priority := (Has_Value => False);
 
-   function Explicit_Priority
-     (Value : Priority_Value) return Optional_Priority is
-       (Has_Value => True, Value => Value);
+   function Explicit_Priority (Value : Priority_Value) return Optional_Priority
+   is (Has_Value => True, Value => Value);
 
 end Munin.Priorities;

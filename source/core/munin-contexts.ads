@@ -30,13 +30,15 @@ private
    use type Munin.Tasks.Task_Unit;
    use type Munin.Protected_Objects.Protected_Object;
 
-   package Task_Unit_Vectors is new Ada.Containers.Vectors
-     (Index_Type   => Positive,
-      Element_Type => Munin.Tasks.Task_Unit);
+   package Task_Unit_Vectors is new
+     Ada.Containers.Vectors
+       (Index_Type   => Positive,
+        Element_Type => Munin.Tasks.Task_Unit);
 
-   package Protected_Object_Vectors is new Ada.Containers.Vectors
-     (Index_Type   => Positive,
-      Element_Type => Munin.Protected_Objects.Protected_Object);
+   package Protected_Object_Vectors is new
+     Ada.Containers.Vectors
+       (Index_Type   => Positive,
+        Element_Type => Munin.Protected_Objects.Protected_Object);
 
    type Context is tagged limited record
       Loaded_Project  : VSS.Strings.Virtual_String :=

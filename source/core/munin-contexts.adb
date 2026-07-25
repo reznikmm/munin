@@ -26,7 +26,8 @@ package body Munin.Contexts is
 
    use type VSS.Strings.Virtual_String;
 
-   package Source_Sets is new Ada.Containers.Hashed_Sets
+   package Source_Sets is new
+     Ada.Containers.Hashed_Sets
        (Element_Type        => VSS.Strings.Virtual_String,
         Hash                => VSS.Strings.Hash,
         Equivalent_Elements => VSS.Strings."=");
@@ -36,39 +37,37 @@ package body Munin.Contexts is
    use type Libadalang.Common.Visit_Status;
 
    function To_Virtual_String
-      (Value : Langkit_Support.Text.Text_Type)
-       return VSS.Strings.Virtual_String;
+     (Value : Langkit_Support.Text.Text_Type)
+      return VSS.Strings.Virtual_String;
 
    procedure Append_Error
-      (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
-       Value  : String);
+     (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
+      Value  : String);
 
    procedure Load_Project_Tree
-      (Project_File : String;
-       Tree         : in out GPR2.Project.Tree.Object;
-       Errors       : in out VSS.String_Vectors.Virtual_String_Vector);
+     (Project_File : String;
+      Tree         : in out GPR2.Project.Tree.Object;
+      Errors       : in out VSS.String_Vectors.Virtual_String_Vector);
 
    procedure Collect_Project_Ada_Sources
-      (Tree   : GPR2.Project.Tree.Object;
-       Result : in out Source_Sets.Set;
-       Errors : in out VSS.String_Vectors.Virtual_String_Vector);
+     (Tree   : GPR2.Project.Tree.Object;
+      Result : in out Source_Sets.Set;
+      Errors : in out VSS.String_Vectors.Virtual_String_Vector);
 
    function Priority_For
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
       return Munin.Priorities.Optional_Priority;
 
    procedure Append_Task_Unique
-      (Self : in out Context;
-       Item : Munin.Tasks.Task_Unit);
+     (Self : in out Context; Item : Munin.Tasks.Task_Unit);
 
    function To_Virtual_String
-     (Value : Langkit_Support.Text.Text_Type)
-      return VSS.Strings.Virtual_String is
-        (VSS.Strings.To_Virtual_String (Value));
+     (Value : Langkit_Support.Text.Text_Type) return VSS.Strings.Virtual_String
+   is (VSS.Strings.To_Virtual_String (Value));
 
    procedure Append_Error
-     (Errors : in out VSS.String_Vectors.Virtual_String_Vector;
-      Value  : String) is
+     (Errors : in out VSS.String_Vectors.Virtual_String_Vector; Value : String)
+   is
    begin
       Errors.Append (VSS.Strings.Conversions.To_Virtual_String (Value));
    end Append_Error;
@@ -81,28 +80,22 @@ package body Munin.Contexts is
       Options : GPR2.Options.Object := GPR2.Options.Empty_Options;
    begin
       GPR2.Options.Add_Switch
-        (Options,
-         Switch => GPR2.Options.P,
-         Param  => Project_File);
+        (Options, Switch => GPR2.Options.P, Param => Project_File);
 
       if Tree.Load
-        (Options              => Options,
-         With_Runtime         => True,
-         Artifacts_Info_Level => GPR2.Sources_Units,
-         Check_Drivers        => False)
+           (Options              => Options,
+            With_Runtime         => True,
+            Artifacts_Info_Level => GPR2.Sources_Units,
+            Check_Drivers        => False)
       then
          null;  --  Load is fine, do nothing
 
       elsif Tree.Is_Defined and then Tree.Has_Messages then
          for Message of Tree.Log_Messages.all loop
-            Append_Error
-              (Errors,
-               Message.Format (Full_Path_Name => True));
+            Append_Error (Errors, Message.Format (Full_Path_Name => True));
          end loop;
       else
-         Append_Error
-           (Errors,
-            "unable to load project file: " & Project_File);
+         Append_Error (Errors, "unable to load project file: " & Project_File);
       end if;
 
    exception
@@ -140,10 +133,11 @@ package body Munin.Contexts is
    begin
       --  Process the closure of the root project, including aggregated
       --  libraries and projects that they might extend.
-      for View of Tree.Root_Project.Closure
-        (Include_Self       => True,
-         Include_Extended   => True,
-         Include_Aggregated => True)
+      for View of
+        Tree.Root_Project.Closure
+          (Include_Self       => True,
+           Include_Extended   => True,
+           Include_Aggregated => True)
       loop
          if not View.Is_Runtime then
             Add_Sources_From_View (View);
@@ -166,14 +160,13 @@ package body Munin.Contexts is
         Langkit_Support.Text.To_Unbounded_Text
           (Langkit_Support.Text.To_Text ("Priority"));
 
-      Expr        : constant Libadalang.Analysis.Expr :=
+      Expr : constant Libadalang.Analysis.Expr :=
         Decl.P_Get_Aspect_Spec_Expr (Aspect_Name);
 
-      function Evaluated_Priority return Munin.Priorities.Optional_Priority;
-
-      function Evaluated_Priority return Munin.Priorities.Optional_Priority is
-        (Munin.Priorities.Explicit_Priority
-          (Integer'Value (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int))));
+      function Evaluated_Priority return Munin.Priorities.Optional_Priority
+      is (Munin.Priorities.Explicit_Priority
+            (Integer'Value
+               (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int))));
    begin
       if Expr.Is_Null then
          return Munin.Priorities.Default_Priority;
@@ -189,23 +182,23 @@ package body Munin.Contexts is
 
    exception
       when E : others =>
-         raise Constraint_Error with
-           "Priority aspect must be static at "
-           & String
-               (Langkit_Support.Text.To_UTF8
-                  (Libadalang.Analysis.Full_Sloc_Image (Expr)))
-           & ": "
-           & String (Langkit_Support.Text.To_UTF8 (Expr.Text))
-           & " ("
-           & Ada.Exceptions.Exception_Message (E)
-           & ")";
+         raise Constraint_Error
+           with
+             "Priority aspect must be static at "
+             & String
+                 (Langkit_Support.Text.To_UTF8
+                    (Libadalang.Analysis.Full_Sloc_Image (Expr)))
+             & ": "
+             & String (Langkit_Support.Text.To_UTF8 (Expr.Text))
+             & " ("
+             & Ada.Exceptions.Exception_Message (E)
+             & ")";
    end Priority_For;
 
    procedure Append_Task_Unique
-     (Self : in out Context;
-      Item : Munin.Tasks.Task_Unit)
+     (Self : in out Context; Item : Munin.Tasks.Task_Unit)
    is
-      Name     : constant VSS.Strings.Virtual_String :=
+      Name : constant VSS.Strings.Virtual_String :=
         Munin.Tasks.Qualified_Name (Item);
 
       Priority : constant Munin.Priorities.Optional_Priority :=
@@ -240,10 +233,10 @@ package body Munin.Contexts is
       Project_File : VSS.Strings.Virtual_String;
       Errors       : out VSS.String_Vectors.Virtual_String_Vector)
    is
-      Path : constant String :=
+      Path  : constant String :=
         VSS.Strings.Conversions.To_UTF_8_String (Project_File);
-      Tree    : GPR2.Project.Tree.Object;
-      Files   : Source_Sets.Set;
+      Tree  : GPR2.Project.Tree.Object;
+      Files : Source_Sets.Set;
    begin
       Errors.Clear;
       Self.Loaded_Project := Project_File;
@@ -287,11 +280,13 @@ package body Munin.Contexts is
       begin
          for File_Name of Files loop
             declare
-               File_Path : constant String :=
-                  VSS.Strings.Conversions.To_UTF_8_String (File_Name);
-               Unit : constant Libadalang.Analysis.Analysis_Unit :=
-                        Context.Get_From_File (File_Path);
-               Root : constant Libadalang.Analysis.Ada_Node := Unit.Root;
+               File_Path           : constant String :=
+                 VSS.Strings.Conversions.To_UTF_8_String (File_Name);
+               Unit                :
+                 constant Libadalang.Analysis.Analysis_Unit :=
+                   Context.Get_From_File (File_Path);
+               Root                : constant Libadalang.Analysis.Ada_Node :=
+                 Unit.Root;
                Instantiation_Depth : Natural := 0;
 
                procedure Add_Task
@@ -303,8 +298,7 @@ package body Munin.Contexts is
                procedure Process_Instance_Node
                  (Node : Libadalang.Analysis.Ada_Node'Class);
 
-               procedure Add_Task
-                 (Decl : Libadalang.Analysis.Basic_Decl'Class)
+               procedure Add_Task (Decl : Libadalang.Analysis.Basic_Decl'Class)
                is
                begin
                   declare
@@ -329,10 +323,8 @@ package body Munin.Contexts is
                end Add_Task;
 
                procedure Add_Protected
-                 (Decl : Libadalang.Analysis.Basic_Decl'Class)
-               is
+                 (Decl : Libadalang.Analysis.Basic_Decl'Class) is
                begin
-                  declare
                   begin
                      Self.Protected_Items.Append
                        (Munin.Protected_Objects.Create
@@ -359,9 +351,10 @@ package body Munin.Contexts is
                   Node_Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
                     Libadalang.Analysis.Kind (Node);
                begin
-                  if Node_Kind in Libadalang.Common.Ada_Task_Type_Decl
-                    | Libadalang.Common.Ada_Single_Task_Decl
-                    | Libadalang.Common.Ada_Single_Task_Type_Decl
+                  if Node_Kind
+                     in Libadalang.Common.Ada_Task_Type_Decl
+                      | Libadalang.Common.Ada_Single_Task_Decl
+                      | Libadalang.Common.Ada_Single_Task_Type_Decl
                   then
                      Add_Task (Node.As_Basic_Decl);
 
@@ -369,8 +362,8 @@ package body Munin.Contexts is
                   then
                      Add_Protected (Node.As_Basic_Decl);
 
-                  elsif Node_Kind =
-                    Libadalang.Common.Ada_Generic_Package_Instantiation
+                  elsif Node_Kind
+                    = Libadalang.Common.Ada_Generic_Package_Instantiation
                   then
                      --  Skip nested instantiations inside generic bodies. Only
                      --  analyze instantiations at the top level (outside any
@@ -417,8 +410,8 @@ package body Munin.Contexts is
                        Node.Parent.As_Ada_Node;
                   begin
                      while not Ancestor.Is_Null loop
-                        if Libadalang.Analysis.Kind (Ancestor) =
-                          Libadalang.Common.Ada_Generic_Package_Decl
+                        if Libadalang.Analysis.Kind (Ancestor)
+                          = Libadalang.Common.Ada_Generic_Package_Decl
                         then
                            return True;
                         end if;
@@ -440,27 +433,30 @@ package body Munin.Contexts is
 
                      begin
                         declare
-                           Inst : constant
-                             Libadalang.Analysis.
-                               Generic_Package_Instantiation :=
-                             Node.As_Generic_Package_Instantiation;
-                           Designated : constant
-                             Libadalang.Analysis.Generic_Decl :=
-                             Inst.P_Designated_Generic_Decl;
+                           Inst       :
+                             constant Libadalang
+                                        .Analysis
+                                        .Generic_Package_Instantiation :=
+                               Node.As_Generic_Package_Instantiation;
+                           Designated :
+                             constant Libadalang.Analysis.Generic_Decl :=
+                               Inst.P_Designated_Generic_Decl;
                         begin
                            if not Designated.Is_Null
-                             and then Designated.Kind =
-                               Libadalang.Common.Ada_Generic_Package_Decl
+                             and then Designated.Kind
+                                      = Libadalang
+                                          .Common
+                                          .Ada_Generic_Package_Decl
                            then
                               Instantiation_Depth := Instantiation_Depth + 1;
                               begin
                                  declare
-                                    Generic_Package : constant
-                                      Generic_Package_Decl_Node :=
+                                    Generic_Package :
+                                      constant Generic_Package_Decl_Node :=
                                         Designated.As_Generic_Package_Decl;
 
-                                    Package_Decl : constant
-                                      Generic_Package_Internal_Node :=
+                                    Package_Decl :
+                                      constant Generic_Package_Internal_Node :=
                                         Generic_Package.F_Package_Decl;
                                  begin
                                     Process_Instance_Node (Package_Decl);
@@ -504,8 +500,10 @@ package body Munin.Contexts is
                              Node.As_Package_Body.P_Decl_Part;
                         begin
                            if not Spec.Is_Null
-                             and then Libadalang.Analysis.Kind (Spec) =
-                               Libadalang.Common.Ada_Generic_Package_Internal
+                             and then Libadalang.Analysis.Kind (Spec)
+                                      = Libadalang
+                                          .Common
+                                          .Ada_Generic_Package_Internal
                            then
                               return Libadalang.Common.Over;
                            end if;
@@ -521,8 +519,7 @@ package body Munin.Contexts is
                   then
                      Add_Task (Node.As_Basic_Decl);
 
-                  elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl
-                  then
+                  elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl then
                      Add_Protected (Node.As_Basic_Decl);
                   end if;
 
@@ -567,8 +564,8 @@ package body Munin.Contexts is
    is
       Last : constant Natural := Self.Protected_Items.Last_Index;
    begin
-      return Result :
-        Munin.Protected_Objects.Protected_Object_Array (1 .. Last)
+      return
+         Result : Munin.Protected_Objects.Protected_Object_Array (1 .. Last)
       do
          for Index in Result'Range loop
             Result (Index) := Self.Protected_Items.Element (Index);

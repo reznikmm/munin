@@ -23,16 +23,16 @@ procedure Munin.CLI.Main is
 
    function Pad_Right (Text : String; Width : Natural) return String;
 
-   function Priority_Image (Value : Munin.Priorities.Optional_Priority)
-      return String;
+   function Priority_Image
+     (Value : Munin.Priorities.Optional_Priority) return String;
 
    function Name_Column_Width
-     (Task_Items : Munin.Tasks.Task_Unit_Array;
+     (Task_Items      : Munin.Tasks.Task_Unit_Array;
       Protected_Items : Munin.Protected_Objects.Protected_Object_Array)
       return Natural;
 
-   Parser : VSS.Command_Line.Parsers.Command_Line_Parser;
-   Help_Option : constant VSS.Command_Line.Binary_Option :=
+   Parser         : VSS.Command_Line.Parsers.Command_Line_Parser;
+   Help_Option    : constant VSS.Command_Line.Binary_Option :=
      (Short_Name  => "h",
       Long_Name   => "help",
       Description => "Display help information");
@@ -51,20 +51,18 @@ procedure Munin.CLI.Main is
       return Text & (1 .. Width - Text'Length => ' ');
    end Pad_Right;
 
-   function Priority_Image (Value : Munin.Priorities.Optional_Priority)
-      return String
-   is
+   function Priority_Image
+     (Value : Munin.Priorities.Optional_Priority) return String is
    begin
       if Value.Has_Value then
-         return
-           Ada.Strings.Fixed.Trim (Value.Value'Image, Ada.Strings.Both);
+         return Ada.Strings.Fixed.Trim (Value.Value'Image, Ada.Strings.Both);
       else
          return "(Default)";
       end if;
    end Priority_Image;
 
    function Name_Column_Width
-     (Task_Items : Munin.Tasks.Task_Unit_Array;
+     (Task_Items      : Munin.Tasks.Task_Unit_Array;
       Protected_Items : Munin.Protected_Objects.Protected_Object_Array)
       return Natural
    is
@@ -133,8 +131,8 @@ begin
 
    Ada.Text_IO.Put_Line
      ("Scanning project: "
-         & VSS.Strings.Conversions.To_UTF_8_String
-               (Parser.Value (Project_Option)));
+      & VSS.Strings.Conversions.To_UTF_8_String
+          (Parser.Value (Project_Option)));
    Ada.Text_IO.New_Line;
 
    declare
@@ -151,15 +149,15 @@ begin
       end if;
 
       declare
-         Task_Items : constant Munin.Tasks.Task_Unit_Array :=
+         Task_Items      : constant Munin.Tasks.Task_Unit_Array :=
            Munin.Contexts.Tasks (Context);
          Protected_Items :
            constant Munin.Protected_Objects.Protected_Object_Array :=
              Munin.Contexts.Protected_Objects (Context);
-         Name_Width : constant Natural :=
+         Name_Width      : constant Natural :=
            Name_Column_Width (Task_Items, Protected_Items);
-         Label_Width : constant Natural := 11;
-         Total : constant Natural :=
+         Label_Width     : constant Natural := 11;
+         Total           : constant Natural :=
            Task_Items'Length + Protected_Items'Length;
       begin
          Ada.Text_IO.Put_Line ("Discovered Concurrency Objects:");

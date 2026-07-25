@@ -10,6 +10,7 @@ package Munin.Program_Units is
    type Program_Unit is interface;
 
    function Qualified_Name
-     (Self : Program_Unit) return VSS.Strings.Virtual_String is abstract;
+     (Self : Program_Unit) return VSS.Strings.Virtual_String
+   is abstract;
 
 end Munin.Program_Units;
