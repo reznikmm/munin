@@ -18,7 +18,8 @@ Munin is an Ada tool that scans a `.gpr` project and reports concurrency objects
 
 1. Keep public Core API free of Libadalang types.
 2. Prefer `VSS.Strings.Virtual_String` for project-facing string handling.
-3. Keep changes focused and minimal; avoid unrelated refactors.
+3. Don't suppress exception with `null;` exception handler
+   (one exception is `Libadalang.Common.Property_Error`).
 4. Don't introduce extra (sub-)type conversions, like Integer to Natural.
 5. Preserve existing style and naming conventions in nearby code. Don't use abbreviations.
 
@@ -28,6 +29,8 @@ Run from repository root unless noted otherwise.
 
 - Compile/check one file (`<unit>.adb`):
   - `alr exec -- gprbuild -q -f -c -u -gnatc -P munin.gpr <unit>.adb '-cargs:ada' -gnatef`
+- Fix code style warnings, force code style after edit:
+  - `alr exec -- ./bin/gnatformat --no-subprojects -P munin.gpr`
 - Build project:
   - `alr build`
 - Run main tests:
@@ -47,10 +50,9 @@ Run from repository root unless noted otherwise.
 
 ## Ada-Specific Notes
 
-- Use predefined Ada container packages compatible with this toolchain
-  (for example, `Ada.Containers.Hashed_Sets`).
-- Keep code compatible with project language settings (avoid Ada 2022-only syntax
-  unless the project is explicitly configured for it).
+- Use predefined Ada container packages
+  (for example, `Ada.Containers.Hashed_Sets`). Don't use Indefinite containers.
+- Use Ada 2022 syntax if you can.
 - If static evaluation assumptions change (priority extraction), ensure error
   paths remain explicit and user-readable.
 

@@ -301,48 +301,22 @@ package body Munin.Contexts is
                procedure Add_Task (Decl : Libadalang.Analysis.Basic_Decl'Class)
                is
                begin
-                  declare
-                     Current : constant Munin.Tasks.Task_Unit :=
-                       Munin.Tasks.Create
-                         (Qualified_Name =>
-                            To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                          Priority       => Priority_For (Decl));
-                  begin
-                     Append_Task_Unique (Self, Current);
-                  exception
-                     when Constraint_Error =>
-                        --  Generic formal parameters cannot be statically
-                        --  evaluated. Skip this task in instantiation context.
-                        null;
-                  end;
-               exception
-                  when Constraint_Error =>
-                     --  Catch exceptions from property access or expression
-                     --  evaluation in generic contexts.
-                     null;
+                  Append_Task_Unique
+                    (Self,
+                     Munin.Tasks.Create
+                       (Qualified_Name =>
+                          To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                        Priority       => Priority_For (Decl)));
                end Add_Task;
 
                procedure Add_Protected
                  (Decl : Libadalang.Analysis.Basic_Decl'Class) is
                begin
-                  begin
-                     Self.Protected_Items.Append
-                       (Munin.Protected_Objects.Create
-                          (Qualified_Name =>
-                             To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                           Priority       => Priority_For (Decl)));
-                  exception
-                     when Constraint_Error =>
-                        --  Generic formal parameters cannot be statically
-                        --  evaluated. Skip this protected object in
-                        --  instantiation context.
-                        null;
-                  end;
-               exception
-                  when Constraint_Error =>
-                     --  Catch exceptions from property access or expression
-                     --  evaluation in generic contexts.
-                     null;
+                  Self.Protected_Items.Append
+                    (Munin.Protected_Objects.Create
+                       (Qualified_Name =>
+                          To_Virtual_String (Decl.P_Fully_Qualified_Name),
+                        Priority       => Priority_For (Decl)));
                end Add_Protected;
 
                procedure Process_Instance_Node
@@ -378,11 +352,6 @@ package body Munin.Contexts is
                   end loop;
 
                exception
-                  when Constraint_Error =>
-                     --  Tasks or protected objects with non-static priorities
-                     --  (e.g., using generic formal parameters) cannot be
-                     --  analyzed. Skip this node.
-                     null;
                   when Libadalang.Common.Property_Error =>
                      --  Some synthetic nodes in instantiated generic trees can
                      --  trigger invalid property requests in Libadalang.
