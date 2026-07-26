@@ -5,6 +5,9 @@
 
 with Ada.Containers.Vectors;
 
+with GPR2.Project.Tree;
+with Libadalang.Analysis;
+
 with VSS.String_Vectors;
 with VSS.Strings;
 
@@ -41,10 +44,12 @@ private
         Element_Type => Munin.Protected_Objects.Protected_Object);
 
    type Context is tagged limited record
-      Loaded_Project  : VSS.Strings.Virtual_String :=
+      Loaded_Project   : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Task_Items      : Task_Unit_Vectors.Vector;
-      Protected_Items : Protected_Object_Vectors.Vector;
+      Project_Tree     : GPR2.Project.Tree.Object;
+      Analysis_Context : Libadalang.Analysis.Analysis_Context;
+      Task_Items       : Task_Unit_Vectors.Vector;
+      Protected_Items  : Protected_Object_Vectors.Vector;
    end record;
 
 end Munin.Contexts;
