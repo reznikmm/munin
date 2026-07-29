@@ -19,10 +19,19 @@ development.contracts = "Yes"
 "*".debug_info = "Yes"
 
 [[depends-on]]
-gnat_native = "<16" # libgpr2 fails to compile with gcc 16.1
 libadalang = "^26.0.0"
 vss_extra = "^26.0.0"
 
 [[actions]]
 type = "test"
 command = ["testsuite/run.sh"]
+
+[[actions]]
+type = "pre-build"
+# The hack works only with:
+# alr settings --global --set dependencies.shared false
+command = ["find", ".", "-name", "langkit_support-prettier_utils.adb", "-exec", "sed", "-i", "-e", "35s/: in/: aliased in/", "-e", "538s/: in/: aliased in/", "{}", ";"]
+
+[[pins]]
+libgpr2 = { url="https://github.com/AdaCore/gpr/", commit="12c649aa4d4c4e334b8271ac619500532aaeb21f" }
+libgpr  = { url="https://github.com/reznikmm/gprbuild/", commit="841bfb074a4aa9729e067eb54f34100b55c05dd0" }

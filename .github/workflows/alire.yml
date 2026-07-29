@@ -12,6 +12,8 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - uses: alire-project/setup-alire@v6
+    - name: Turn shared dependencies off
+      run: alr settings --global --set dependencies.shared false
     - name: Build project
       run: alr build
     - name: Build project and run tests
