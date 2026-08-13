@@ -148,6 +148,8 @@ package body Munin.Contexts is
          return;
       end if;
 
+      Self.Sources := Files;
+
       for File_Name of Files loop
          declare
             File_Path           : constant String :=

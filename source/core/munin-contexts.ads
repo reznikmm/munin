@@ -48,6 +48,7 @@ private
         VSS.Strings.Empty_Virtual_String;
       Project_Tree     : GPR2.Project.Tree.Object;
       Analysis_Context : Libadalang.Analysis.Analysis_Context;
+      Sources          : VSS.String_Vectors.Virtual_String_Vector;
       Task_Items       : Task_Unit_Vectors.Vector;
       Protected_Items  : Protected_Object_Vectors.Vector;
    end record;
