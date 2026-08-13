@@ -11,6 +11,7 @@ with Libadalang.Common;
 
 with Munin.Priorities;
 with Munin.Project_Loading;
+with Munin.Contexts.Traverses;
 
 with VSS.Strings.Conversions;
 
@@ -150,232 +151,68 @@ package body Munin.Contexts is
 
       Self.Sources := Files;
 
+      --  Collect diagnostics from all files
       for File_Name of Files loop
          declare
-            File_Path           : constant String :=
+            File_Path : constant String :=
               VSS.Strings.Conversions.To_UTF_8_String (File_Name);
-            Unit                : constant Libadalang.Analysis.Analysis_Unit :=
+            Unit : constant Libadalang.Analysis.Analysis_Unit :=
               Self.Analysis_Context.Get_From_File (File_Path);
-            Root                : constant Libadalang.Analysis.Ada_Node :=
-              Unit.Root;
-            Instantiation_Depth : Natural := 0;
-
-            procedure Add_Task (Decl : Libadalang.Analysis.Basic_Decl'Class);
-
-            procedure Add_Protected
-              (Decl : Libadalang.Analysis.Basic_Decl'Class);
-
-            procedure Process_Instance_Node
-              (Node : Libadalang.Analysis.Ada_Node'Class);
-
-            procedure Add_Task (Decl : Libadalang.Analysis.Basic_Decl'Class) is
-            begin
-               Append_Task_Unique
-                 (Self,
-                  Munin.Tasks.Create
-                    (Qualified_Name =>
-                       To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                     Priority       => Priority_For (Decl)));
-            end Add_Task;
-
-            procedure Add_Protected
-              (Decl : Libadalang.Analysis.Basic_Decl'Class) is
-            begin
-               Self.Protected_Items.Append
-                 (Munin.Protected_Objects.Create
-                    (Qualified_Name =>
-                       To_Virtual_String (Decl.P_Fully_Qualified_Name),
-                     Priority       => Priority_For (Decl)));
-            end Add_Protected;
-
-            procedure Process_Instance_Node
-              (Node : Libadalang.Analysis.Ada_Node'Class)
-            is
-               Node_Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
-                 Libadalang.Analysis.Kind (Node);
-            begin
-               if Node_Kind
-                  in Libadalang.Common.Ada_Task_Type_Decl
-                   | Libadalang.Common.Ada_Single_Task_Decl
-                   | Libadalang.Common.Ada_Single_Task_Type_Decl
-               then
-                  Add_Task (Node.As_Basic_Decl);
-
-               elsif Node_Kind = Libadalang.Common.Ada_Single_Protected_Decl
-               then
-                  Add_Protected (Node.As_Basic_Decl);
-
-               elsif Node_Kind
-                 = Libadalang.Common.Ada_Generic_Package_Instantiation
-               then
-                  --  Skip nested instantiations inside generic bodies. Only
-                  --  analyze instantiations at the top level (outside any
-                  --  generic scope).
-                  return;
-               end if;
-
-               for Child of Node.Children loop
-                  if not Child.Is_Null then
-                     Process_Instance_Node (Child);
-                  end if;
-               end loop;
-
-            exception
-               when Libadalang.Common.Property_Error =>
-                  --  Some synthetic nodes in instantiated generic trees can
-                  --  trigger invalid property requests in Libadalang.
-                  --  Skip only the failing subtree and keep scanning
-                  --  siblings.
-                  null;
-            end Process_Instance_Node;
-
-            function Visit
-              (Node : Libadalang.Analysis.Ada_Node'Class)
-               return Libadalang.Common.Visit_Status;
-
-            function Visit
-              (Node : Libadalang.Analysis.Ada_Node'Class)
-               return Libadalang.Common.Visit_Status
-            is
-               Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
-                 Libadalang.Analysis.Kind (Node);
-
-               --  Check if Node is inside a generic package template
-               function Is_Inside_Generic_Template return Boolean;
-
-               function Is_Inside_Generic_Template return Boolean is
-                  Ancestor : Libadalang.Analysis.Ada_Node :=
-                    Node.Parent.As_Ada_Node;
-               begin
-                  while not Ancestor.Is_Null loop
-                     if Libadalang.Analysis.Kind (Ancestor)
-                       = Libadalang.Common.Ada_Generic_Package_Decl
-                     then
-                        return True;
-                     end if;
-                     Ancestor := Ancestor.Parent.As_Ada_Node;
-                  end loop;
-                  return False;
-               end Is_Inside_Generic_Template;
-            begin
-               if Kind = Libadalang.Common.Ada_Generic_Package_Instantiation
-               then
-                  --  Skip nested instantiations and instantiations
-                  --  inside generic templates: only process top-level
-                  --  instantiations outside of any generic scope.
-                  if Instantiation_Depth > 0 or else Is_Inside_Generic_Template
-                  then
-                     return Libadalang.Common.Over;
-                  end if;
-
-                  begin
-                     declare
-                        Inst       :
-                          constant Libadalang
-                                     .Analysis
-                                     .Generic_Package_Instantiation :=
-                            Node.As_Generic_Package_Instantiation;
-                        Designated :
-                          constant Libadalang.Analysis.Generic_Decl :=
-                            Inst.P_Designated_Generic_Decl;
-                     begin
-                        if not Designated.Is_Null
-                          and then Designated.Kind
-                                   = Libadalang.Common.Ada_Generic_Package_Decl
-                        then
-                           Instantiation_Depth := Instantiation_Depth + 1;
-                           begin
-                              declare
-                                 Generic_Package :
-                                   constant Libadalang
-                                              .Analysis
-                                              .Generic_Package_Decl :=
-                                     Designated.As_Generic_Package_Decl;
-
-                                 Package_Decl :
-                                   constant Libadalang
-                                              .Analysis
-                                              .Generic_Package_Internal :=
-                                     Generic_Package.F_Package_Decl;
-                              begin
-                                 Process_Instance_Node (Package_Decl);
-                              end;
-                           exception
-                              when Libadalang.Common.Property_Error =>
-                                 null;
-                              when others =>
-                                 Instantiation_Depth :=
-                                   Instantiation_Depth - 1;
-                                 raise;
-                           end;
-                           Instantiation_Depth := Instantiation_Depth - 1;
-                        end if;
-                     end;
-                  exception
-                     when Libadalang.Common.Property_Error =>
-                        --  Some instantiation node properties are not
-                        --  available or invalid; skip this instantiation.
-                        null;
-                  end;
-
-                  return Libadalang.Common.Over;
-
-               elsif Kind = Libadalang.Common.Ada_Generic_Package_Decl
-                 and then Instantiation_Depth = 0
-               then
-                  --  Skip generic package specs in normal traversal. Their
-                  --  instantiated declarations are traversed via a generic
-                  --  package instantiation.
-                  return Libadalang.Common.Over;
-
-               elsif Kind = Libadalang.Common.Ada_Package_Body
-                 and then Instantiation_Depth = 0
-               then
-                  --  Skip bodies of generic packages. Only instantiations
-                  --  trigger analysis of a generic package's contents.
-                  begin
-                     declare
-                        Spec : constant Libadalang.Analysis.Basic_Decl :=
-                          Node.As_Package_Body.P_Decl_Part;
-                     begin
-                        if not Spec.Is_Null
-                          and then Libadalang.Analysis.Kind (Spec)
-                                   = Libadalang
-                                       .Common
-                                       .Ada_Generic_Package_Internal
-                        then
-                           return Libadalang.Common.Over;
-                        end if;
-                     end;
-                  exception
-                     when Libadalang.Common.Property_Error =>
-                        null;
-                  end;
-
-               elsif Kind = Libadalang.Common.Ada_Task_Type_Decl
-                 or else Kind = Libadalang.Common.Ada_Single_Task_Decl
-                 or else Kind = Libadalang.Common.Ada_Single_Task_Type_Decl
-               then
-                  Add_Task (Node.As_Basic_Decl);
-
-               elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl then
-                  Add_Protected (Node.As_Basic_Decl);
-               end if;
-
-               return Libadalang.Common.Into;
-            end Visit;
          begin
             if Unit.Has_Diagnostics then
                for D of Unit.Diagnostics loop
                   Append_Error (Errors, Unit.Format_GNU_Diagnostic (D));
                end loop;
             end if;
-
-            if not Root.Is_Null then
-               Libadalang.Analysis.Traverse (Root, Visit'Access);
-            end if;
          end;
       end loop;
+
+      --  Process library-level names, including those in
+      --  generic instantiations
+      declare
+         procedure Process_Name
+           (Name : Libadalang.Analysis.Defining_Name);
+
+         procedure Process_Name
+           (Name : Libadalang.Analysis.Defining_Name)
+         is
+         begin
+            declare
+               Node : constant Libadalang.Analysis.Ada_Node :=
+                 Name.Parent;
+               Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
+                 Libadalang.Analysis.Kind (Node);
+            begin
+               if Kind
+                  in Libadalang.Common.Ada_Task_Type_Decl
+                   | Libadalang.Common.Ada_Single_Task_Decl
+                   | Libadalang.Common.Ada_Single_Task_Type_Decl
+               then
+                  Append_Task_Unique
+                    (Self,
+                     Munin.Tasks.Create
+                       (Qualified_Name =>
+                          To_Virtual_String
+                            (Node.As_Basic_Decl.P_Fully_Qualified_Name),
+                        Priority => Priority_For (Node.As_Basic_Decl)));
+
+               elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl then
+                  Self.Protected_Items.Append
+                    (Munin.Protected_Objects.Create
+                       (Qualified_Name =>
+                          To_Virtual_String
+                            (Node.As_Basic_Decl.P_Fully_Qualified_Name),
+                        Priority => Priority_For (Node.As_Basic_Decl)));
+               end if;
+            end;
+         exception
+            when Libadalang.Common.Property_Error =>
+               null;
+         end Process_Name;
+      begin
+         Munin.Contexts.Traverses.Each_Library_Level_Name
+           (Self, Process_Name'Access);
+      end;
 
    exception
       when E : others =>

@@ -51,7 +51,16 @@ package body Munin.Contexts.Traverses is
                    Inst.P_Designated_Generic_Decl;
             begin
                if not Designated.Is_Null then
-                  Visit (Designated.As_Ada_Node, Action);
+                  for Index in 1 .. Designated.Children_Count loop
+                     declare
+                        Child_Node : constant Libadalang.Analysis.Ada_Node :=
+                          Designated.Child (Index);
+                     begin
+                        if not Child_Node.Is_Null then
+                           Visit (Child_Node, Action);
+                        end if;
+                     end;
+                  end loop;
                end if;
             end;
          exception
