@@ -10,6 +10,7 @@ with GNATCOLL.GMP.Integers;
 with Langkit_Support.Text;
 with Libadalang.Common;
 
+with Munin.Call_Graph_Providers.CI;
 with Munin.Priorities;
 with Munin.Project_Loading;
 with Munin.Contexts.Traverses;
@@ -22,6 +23,12 @@ package body Munin.Contexts is
 
    use type Libadalang.Common.Ada_Node_Kind_Type;
    use type Libadalang.Common.Visit_Status;
+
+   type CI_Provider_Access is
+     access all Munin.Call_Graph_Providers.CI.CI_Provider;
+   --  A normally-allocatable access type used only to obtain the aliased
+   --  CI_Provider that Self.Call_Graph (a zero-storage-size access type)
+   --  is then converted to point at.
 
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type)
@@ -279,6 +286,8 @@ package body Munin.Contexts is
       Self.Loaded_Project := Project_File;
       Self.Task_Items.Clear;
       Self.Protected_Items.Clear;
+      Self.Call_Graph := null;
+      Self.Call_Graph_Error := VSS.Strings.Empty_Virtual_String;
 
       Munin.Project_Loading.Load
         (Project_File     => Project_File,
@@ -424,6 +433,19 @@ package body Munin.Contexts is
            (Self, Process_Name'Access);
          Munin.Contexts.Traverses.Each_Effectively_Global_Name
            (Self, Process_Name'Access);
+      end;
+
+      declare
+         Provider : constant CI_Provider_Access :=
+           new Munin.Call_Graph_Providers.CI.CI_Provider;
+      begin
+         Munin.Call_Graph_Providers.CI.Initialize
+           (Provider.all, Self.Project_Tree, Self.Call_Graph_Error);
+
+         if Self.Call_Graph_Error.Is_Empty then
+            Self.Call_Graph :=
+              Munin.Call_Graph_Providers.Call_Graph_Provider_Access (Provider);
+         end if;
       end;
 
    exception

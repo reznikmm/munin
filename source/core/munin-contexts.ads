@@ -32,7 +32,13 @@ package Munin.Contexts is
    function Call_Graph
      (Self : Context)
       return Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
-   --  Always null for now, pending a Call_Graph_Provider implementation.
+   --  Null when Load_Project could not find or parse any `.ci` file for
+   --  the project (see Call_Graph_Error for why).
+
+   function Call_Graph_Error
+     (Self : Context) return VSS.Strings.Virtual_String;
+   --  Explanation for why Call_Graph is null; empty when Call_Graph is
+   --  set.
 
 private
 
@@ -58,11 +64,16 @@ private
       Task_Items       : Task_Unit_Vectors.Vector;
       Protected_Items  : Protected_Object_Vectors.Vector;
       Call_Graph       : Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
+      Call_Graph_Error : VSS.Strings.Virtual_String :=
+        VSS.Strings.Empty_Virtual_String;
    end record;
 
    function Call_Graph
      (Self : Context)
       return Munin.Call_Graph_Providers.Call_Graph_Provider_Access
    is (Self.Call_Graph);
+
+   function Call_Graph_Error (Self : Context) return VSS.Strings.Virtual_String
+   is (Self.Call_Graph_Error);
 
 end Munin.Contexts;

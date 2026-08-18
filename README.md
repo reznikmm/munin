@@ -8,6 +8,31 @@
 
 WORK IN PROGRESS!
 
+## Usage
+
+Point Munin at a project's `.gpr` file and pick what to report:
+
+```bash
+munin show priorities -P my_project.gpr
+munin show callgraph  -P my_project.gpr
+```
+
+`show priorities` lists every discovered task and protected object with its
+resolved priority (see [Priority Resolution](#priority-resolution) below).
+
+`show callgraph` prints the call tree rooted at every task body and main
+subprogram, read from GCC's `-fcallgraph-info=su,da` output. Build the
+project with that switch first, e.g.:
+
+```ada
+package Compiler is
+   for Switches ("Ada") use Compiler'Switches ("Ada")
+     & ("-fcallgraph-info=su,da");
+end Compiler;
+```
+
+If no `.ci` file is found, Munin reports this and explains how to enable it.
+
 ## Priority Resolution
 
 Munin resolves the `Priority`/`Interrupt_Priority` of every discovered task
