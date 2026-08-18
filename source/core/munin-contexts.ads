@@ -11,6 +11,7 @@ with Libadalang.Analysis;
 with VSS.String_Vectors;
 with VSS.Strings;
 
+with Munin.Call_Graph_Providers;
 with Munin.Protected_Objects;
 with Munin.Tasks;
 
@@ -27,6 +28,11 @@ package Munin.Contexts is
 
    function Protected_Objects
      (Self : Context) return Munin.Protected_Objects.Protected_Object_Array;
+
+   function Call_Graph
+     (Self : Context)
+      return Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
+   --  Always null for now, pending a Call_Graph_Provider implementation.
 
 private
 
@@ -51,6 +57,12 @@ private
       Sources          : VSS.String_Vectors.Virtual_String_Vector;
       Task_Items       : Task_Unit_Vectors.Vector;
       Protected_Items  : Protected_Object_Vectors.Vector;
+      Call_Graph       : Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
    end record;
+
+   function Call_Graph
+     (Self : Context)
+      return Munin.Call_Graph_Providers.Call_Graph_Provider_Access
+   is (Self.Call_Graph);
 
 end Munin.Contexts;
