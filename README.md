@@ -56,6 +56,23 @@ and protected object, however it is expressed:
    end Pragma_Register;
    ```
 
+## Concurrency Object Recognition
+
+Besides task/protected (type) declarations and library-level objects of a
+named task/protected type, Munin also recognizes an object of a **private
+type whose full view is implemented as protected or task**, such as
+`Ada.Synchronous_Task_Control.Suspension_Object`:
+
+```ada
+with Ada.Synchronous_Task_Control;
+
+Ready : Ada.Synchronous_Task_Control.Suspension_Object;
+```
+
+Only the object (`Ready`) is reported, never the private type itself. Since
+the implementation lives in the runtime and isn't visible from the
+analyzed source, its priority is reported as `(Default)`.
+
 ## Running Tests
 
 From the repository root, run:

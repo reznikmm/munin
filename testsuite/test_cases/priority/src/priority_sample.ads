@@ -7,6 +7,7 @@
 --  Munin priority-discovery testcase.
 --  This source is analyzed by Munin (via Libadalang); it is not executed.
 
+with Ada.Synchronous_Task_Control;
 with System;
 
 package Priority_Sample is
@@ -75,5 +76,10 @@ package Priority_Sample is
    task Pragma_Task is
       pragma Interrupt_Priority (System.Interrupt_Priority'Last);
    end Pragma_Task;
+
+   --  A library-level object of a private type whose full view (in the
+   --  runtime's private part) is implemented as protected. Only the object
+   --  (Ready), not the type, should be reported.
+   Ready : Ada.Synchronous_Task_Control.Suspension_Object;
 
 end Priority_Sample;

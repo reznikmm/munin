@@ -103,11 +103,24 @@ package body Munin.Contexts is
          then Libadalang.Analysis.No_Base_Type_Decl
          else Designated_Type.P_Canonical_Type);
 
+      Full_Type_Decl : constant Libadalang.Analysis.Base_Type_Decl :=
+        (if Type_Decl.Is_Null
+           or else Type_Decl.Kind
+                   in Libadalang.Common.Ada_Protected_Type_Decl
+                    | Libadalang.Common.Ada_Task_Type_Decl_Range
+           or else Type_Decl.P_Full_View.Is_Null
+         then Type_Decl
+         else Type_Decl.P_Full_View);
+      --  A private type (e.g. Ada.Synchronous_Task_Control.Suspension_Object)
+      --  can be implemented as protected/task in its full view, only
+      --  visible from within the package that declares it. Follow that full
+      --  view when the type itself isn't already a task/protected type.
+
       --  The declaration that actually carries the Priority/
-      --  Interrupt_Priority aspect: the resolved type for an object
+      --  Interrupt_Priority aspect: the resolved (full) type for an object
       --  declaration, Decl itself for a task/protected (type) declaration.
       Aspect_Decl : constant Libadalang.Analysis.Basic_Decl'Class :=
-        (if Type_Decl.Is_Null then Decl else Type_Decl);
+        (if Full_Type_Decl.Is_Null then Decl else Full_Type_Decl);
 
       function Visible_Decls
         (Decl : Libadalang.Analysis.Basic_Decl'Class)
@@ -356,11 +369,29 @@ package body Munin.Contexts is
                         then Libadalang.Analysis.No_Base_Type_Decl
                         else Designated_Type.P_Canonical_Type);
 
+                     Full_Type_Decl :
+                       constant Libadalang.Analysis.Base_Type_Decl :=
+                         (if Type_Decl.Is_Null
+                            or else Type_Decl.Kind
+                                    in Libadalang
+                                         .Common
+                                         .Ada_Protected_Type_Decl
+                                     | Libadalang
+                                         .Common
+                                         .Ada_Task_Type_Decl_Range
+                            or else Type_Decl.P_Full_View.Is_Null
+                          then Type_Decl
+                          else Type_Decl.P_Full_View);
+                     --  A private type (e.g.
+                     --  Ada.Synchronous_Task_Control.Suspension_Object) can
+                     --  be implemented as protected/task in its full view;
+                     --  follow it when Type_Decl itself isn't already one.
+
                      Type_Kind :
                        constant Libadalang.Common.Ada_Node_Kind_Type :=
-                         (if Type_Decl.Is_Null
+                         (if Full_Type_Decl.Is_Null
                           then Libadalang.Common.Ada_Node_Kind_Type'First
-                          else Type_Decl.Kind);
+                          else Full_Type_Decl.Kind);
                   begin
                      if Type_Kind = Libadalang.Common.Ada_Protected_Type_Decl
                      then

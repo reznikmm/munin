@@ -145,6 +145,7 @@ package body Test_Priority is
          Found_Discriminant_11 : Boolean := False;
          Found_Pragma_Task : Boolean := False;
          Found_Pragma_Protected : Boolean := False;
+         Found_Suspension_Object : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -183,7 +184,7 @@ package body Test_Priority is
                 Munin.Contexts.Protected_Objects (Context);
          begin
             Op.Assert (Task_Items'Length = 5);
-            Op.Assert (Protected_Items'Length = 5);
+            Op.Assert (Protected_Items'Length = 6);
 
             for Item of Task_Items loop
                declare
@@ -245,9 +246,11 @@ package body Test_Priority is
                begin
                   --  Bare protected type declarations (Guard_Type,
                   --  Accumulator) must never be reported; only their
-                  --  objects should be.
+                  --  objects should be. Same for a private type whose full
+                  --  view is protected (Suspension_Object).
                   Op.Assert (not Contains (Name, "guard_type"));
                   Op.Assert (not Contains (Name, "accumulator"));
+                  Op.Assert (not Contains (Name, "suspension_object"));
 
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "shared_register")
@@ -283,6 +286,13 @@ package body Test_Priority is
                      if Priority.Has_Value and then Priority.Value = 22 then
                         Found_Pragma_Protected := True;
                      end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "ready")
+                  then
+                     if not Priority.Has_Value then
+                        Found_Suspension_Object := True;
+                     end if;
                   end if;
                end;
             end loop;
@@ -298,6 +308,7 @@ package body Test_Priority is
          Op.Assert (Found_Discriminant_11);
          Op.Assert (Found_Pragma_Task);
          Op.Assert (Found_Pragma_Protected);
+         Op.Assert (Found_Suspension_Object);
       end;
    end Test_Priority_Build;
 
