@@ -25,4 +25,11 @@ package body Priority_Sample is
 
    end Shared_Register;
 
+   task body Interrupt_Task is
+   begin
+      loop
+         delay 1.0;
+      end loop;
+   end Interrupt_Task;
+
 end Priority_Sample;

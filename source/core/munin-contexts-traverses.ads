@@ -9,7 +9,6 @@ package Munin.Contexts.Traverses is
 
    procedure Each_Library_Level_Name
      (Self   : Munin.Contexts.Context;
-      Action : access
-        procedure (Name : Libadalang.Analysis.Defining_Name));
+      Action : access procedure (Name : Libadalang.Analysis.Defining_Name));
 
 end Munin.Contexts.Traverses;

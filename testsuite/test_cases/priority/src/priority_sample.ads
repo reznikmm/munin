@@ -7,6 +7,8 @@
 --  Munin priority-discovery testcase.
 --  This source is analyzed by Munin (via Libadalang); it is not executed.
 
+with System;
+
 package Priority_Sample is
 
     --  A single task with a target-sensitive priority.
@@ -22,5 +24,9 @@ package Priority_Sample is
    private
       Data : Integer := 0;
    end Shared_Register;
+
+   --  A task with an explicit interrupt priority.
+   task Interrupt_Task
+     with Interrupt_Priority => System.Interrupt_Priority'First;
 
 end Priority_Sample;

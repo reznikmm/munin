@@ -138,6 +138,7 @@ package body Test_Priority is
          Found_Task      : Boolean := False;
          Found_Protected : Boolean := False;
          Found_Generic_Task : Boolean := False;
+         Found_Interrupt_Task : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -175,8 +176,8 @@ package body Test_Priority is
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
          begin
-            Op.Assert (Task_Items'Length > 0);
-            Op.Assert (Protected_Items'Length > 0);
+            Op.Assert (Task_Items'Length = 3);
+            Op.Assert (Protected_Items'Length = 1);
 
             for Item of Task_Items loop
                declare
@@ -192,6 +193,13 @@ package body Test_Priority is
                   then
                      if Priority.Has_Value and then Priority.Value = 32 then
                         Found_Task := True;
+                     end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "interrupt_task")
+                  then
+                     if Priority.Has_Value then
+                        Found_Interrupt_Task := True;
                      end if;
 
                   elsif Contains (Name, "readers_24") then
@@ -225,6 +233,7 @@ package body Test_Priority is
          Op.Assert (Found_Task);
          Op.Assert (Found_Protected);
          Op.Assert (Found_Generic_Task);
+         Op.Assert (Found_Interrupt_Task);
       end;
    end Test_Priority_Build;
 

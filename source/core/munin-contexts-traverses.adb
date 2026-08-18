@@ -19,8 +19,7 @@ package body Munin.Contexts.Traverses is
      (Node   : Libadalang.Analysis.Ada_Node;
       Action : access procedure (Name : Libadalang.Analysis.Defining_Name))
    is
-      Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
-            Node.Kind;
+      Kind : constant Libadalang.Common.Ada_Node_Kind_Type := Node.Kind;
    begin
       --  Skip generic templates: only instantiations are traversed
       if Kind
@@ -45,11 +44,12 @@ package body Munin.Contexts.Traverses is
                   then Libadalang.Common.Ada_Node_Kind_Type'First
                   else Decl_Part.Kind);
             begin
-               if not Decl_Part.Is_Null and Decl_Kind
-                  in Libadalang.Common.Ada_Generic_Package_Decl
-                   | Libadalang.Common.Ada_Generic_Subp_Decl
-                   | Libadalang.Common.Ada_Generic_Package_Internal
-                   | Libadalang.Common.Ada_Generic_Subp_Internal
+               if not Decl_Part.Is_Null
+                 and Decl_Kind
+                     in Libadalang.Common.Ada_Generic_Package_Decl
+                      | Libadalang.Common.Ada_Generic_Subp_Decl
+                      | Libadalang.Common.Ada_Generic_Package_Internal
+                      | Libadalang.Common.Ada_Generic_Subp_Internal
                then
                   return;
                end if;

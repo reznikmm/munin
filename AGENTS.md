@@ -30,7 +30,7 @@ Run from repository root unless noted otherwise.
 - Compile/check one file (`<unit>.adb`):
   - `alr exec -- gprbuild -q -f -c -u -gnatc -P munin.gpr <unit>.adb '-cargs:ada' -gnatef`
 - Fix code style warnings, force code style after edit:
-  - `alr exec -- ./bin/gnatformat --no-subprojects -P munin.gpr`
+  - `alr exec -- gnatformat --no-subprojects --charset utf-8 -P munin.gpr`
 - Build project:
   - `alr build`
 - Run main tests:

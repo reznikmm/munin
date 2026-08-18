@@ -5,6 +5,6 @@
 
 set -e
 set -x
-alr -C testsuite/ build -- -m
+alr -C testsuite/ build -- -m -eS
 alr -C testsuite/test_cases build
 alr -C testsuite/test_cases/ exec ../bin/testsuite

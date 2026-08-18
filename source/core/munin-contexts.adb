@@ -52,12 +52,21 @@ package body Munin.Contexts is
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
       return Munin.Priorities.Optional_Priority
    is
-      Aspect_Name : constant Langkit_Support.Text.Unbounded_Text_Type :=
-        Langkit_Support.Text.To_Unbounded_Text
-          (Langkit_Support.Text.To_Text ("Priority"));
+      function Aspect_Expr (Name : String) return Libadalang.Analysis.Expr
+      is (Decl.P_Get_Aspect_Spec_Expr
+            (Langkit_Support.Text.To_Unbounded_Text
+               (Langkit_Support.Text.To_Text (Name))));
 
+      Priority_Expr : constant Libadalang.Analysis.Expr :=
+        Aspect_Expr ("Priority");
+
+      --  Ada RM 13.7: a task/protected declaration specifies at most one of
+      --  Priority / Interrupt_Priority, so falling back to Interrupt_Priority
+      --  only when Priority is absent is sufficient for valid code.
       Expr : constant Libadalang.Analysis.Expr :=
-        Decl.P_Get_Aspect_Spec_Expr (Aspect_Name);
+        (if Priority_Expr.Is_Null
+         then Aspect_Expr ("Interrupt_Priority")
+         else Priority_Expr);
 
       function Evaluated_Priority return Munin.Priorities.Optional_Priority
       is (Munin.Priorities.Explicit_Priority
@@ -80,7 +89,10 @@ package body Munin.Contexts is
       when E : others =>
          raise Constraint_Error
            with
-             "Priority aspect must be static at "
+             (if Priority_Expr.Is_Null
+              then "Interrupt_Priority"
+              else "Priority")
+             & " aspect must be static at "
              & String
                  (Langkit_Support.Text.To_UTF8
                     (Libadalang.Analysis.Full_Sloc_Image (Expr)))
@@ -156,7 +168,7 @@ package body Munin.Contexts is
          declare
             File_Path : constant String :=
               VSS.Strings.Conversions.To_UTF_8_String (File_Name);
-            Unit : constant Libadalang.Analysis.Analysis_Unit :=
+            Unit      : constant Libadalang.Analysis.Analysis_Unit :=
               Self.Analysis_Context.Get_From_File (File_Path);
          begin
             if Unit.Has_Diagnostics then
@@ -170,16 +182,12 @@ package body Munin.Contexts is
       --  Process library-level names, including those in
       --  generic instantiations
       declare
-         procedure Process_Name
-           (Name : Libadalang.Analysis.Defining_Name);
+         procedure Process_Name (Name : Libadalang.Analysis.Defining_Name);
 
-         procedure Process_Name
-           (Name : Libadalang.Analysis.Defining_Name)
-         is
+         procedure Process_Name (Name : Libadalang.Analysis.Defining_Name) is
          begin
             declare
-               Node : constant Libadalang.Analysis.Ada_Node :=
-                 Name.Parent;
+               Node : constant Libadalang.Analysis.Ada_Node := Name.Parent;
                Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
                  Libadalang.Analysis.Kind (Node);
             begin
@@ -194,7 +202,7 @@ package body Munin.Contexts is
                        (Qualified_Name =>
                           To_Virtual_String
                             (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                        Priority => Priority_For (Node.As_Basic_Decl)));
+                        Priority       => Priority_For (Node.As_Basic_Decl)));
 
                elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl then
                   Self.Protected_Items.Append
@@ -202,7 +210,7 @@ package body Munin.Contexts is
                        (Qualified_Name =>
                           To_Virtual_String
                             (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                        Priority => Priority_For (Node.As_Basic_Decl)));
+                        Priority       => Priority_For (Node.As_Basic_Decl)));
                end if;
             end;
          exception
