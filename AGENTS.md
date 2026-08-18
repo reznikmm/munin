@@ -22,6 +22,18 @@ Munin is an Ada tool that scans a `.gpr` project and reports concurrency objects
    (one exception is `Libadalang.Common.Property_Error`).
 4. Don't introduce extra (sub-)type conversions, like Integer to Natural.
 5. Preserve existing style and naming conventions in nearby code. Don't use abbreviations.
+6. Prefer conditional expressions over if-statements to keep nesting shallow, e.g.:
+   ```
+   Type_Decl : Libadalang.Analysis.Base_Type_Decl :=
+     (if Type_Expr.Is_Null then Libadalang.Analysis.No_Base_Type_Decl
+      else Type_Expr.P_Designated_Type_Decl);
+   ```
+7. Spell out fully qualified names for Libadalang types (e.g.
+   `Libadalang.Analysis.Base_Type_Decl`, not `Base_Type_Decl`), even where a
+   `use` clause would make the short form legal.
+8. Use dot notation for calls on tagged/class-wide values where available
+   (`Node.Kind`), rather than the prefixed subprogram form
+   (`Libadalang.Common.Kind (Node)`).
 
 ## Build And Test Commands
 

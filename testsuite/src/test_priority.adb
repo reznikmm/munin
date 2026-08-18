@@ -139,6 +139,8 @@ package body Test_Priority is
          Found_Protected : Boolean := False;
          Found_Generic_Task : Boolean := False;
          Found_Interrupt_Task : Boolean := False;
+         Found_Object_Task : Boolean := False;
+         Found_Object_Protected : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -176,8 +178,8 @@ package body Test_Priority is
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
          begin
-            Op.Assert (Task_Items'Length = 3);
-            Op.Assert (Protected_Items'Length = 1);
+            Op.Assert (Task_Items'Length = 4);
+            Op.Assert (Protected_Items'Length = 2);
 
             for Item of Task_Items loop
                declare
@@ -188,6 +190,10 @@ package body Test_Priority is
                   Priority : constant Munin.Priorities.Optional_Priority :=
                     Munin.Tasks.Priority (Item);
                begin
+                  --  A bare task type declaration (Worker_Type) must never
+                  --  be reported; only the object (Worker) should be.
+                  Op.Assert (not Contains (Name, "worker_type"));
+
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "telemetry")
                   then
@@ -206,6 +212,13 @@ package body Test_Priority is
                      if Priority.Has_Value and then Priority.Value = 24 then
                         Found_Generic_Task := True;
                      end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "worker")
+                  then
+                     if Priority.Has_Value and then Priority.Value = 18 then
+                        Found_Object_Task := True;
+                     end if;
                   end if;
                end;
             end loop;
@@ -219,11 +232,22 @@ package body Test_Priority is
                   Priority : constant Munin.Priorities.Optional_Priority :=
                     Munin.Protected_Objects.Priority (Item);
                begin
+                  --  A bare protected type declaration (Guard_Type) must
+                  --  never be reported; only the object (Guard) should be.
+                  Op.Assert (not Contains (Name, "guard_type"));
+
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "shared_register")
                   then
                      if Priority.Has_Value and then Priority.Value = 20 then
                         Found_Protected := True;
+                     end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "guard")
+                  then
+                     if Priority.Has_Value and then Priority.Value = 15 then
+                        Found_Object_Protected := True;
                      end if;
                   end if;
                end;
@@ -234,6 +258,8 @@ package body Test_Priority is
          Op.Assert (Found_Protected);
          Op.Assert (Found_Generic_Task);
          Op.Assert (Found_Interrupt_Task);
+         Op.Assert (Found_Object_Task);
+         Op.Assert (Found_Object_Protected);
       end;
    end Test_Priority_Build;
 

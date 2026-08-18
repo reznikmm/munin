@@ -189,11 +189,13 @@ package body Munin.Contexts is
             declare
                Node : constant Libadalang.Analysis.Ada_Node := Name.Parent;
                Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
-                 Libadalang.Analysis.Kind (Node);
+                 Node.Kind;
             begin
+               --  Single task/protected declarations always denote one
+               --  concrete object; a bare task/protected type declaration
+               --  (with no object) never is, so it is never reported here.
                if Kind
-                  in Libadalang.Common.Ada_Task_Type_Decl
-                   | Libadalang.Common.Ada_Single_Task_Decl
+                  in Libadalang.Common.Ada_Single_Task_Decl
                    | Libadalang.Common.Ada_Single_Task_Type_Decl
                then
                   Append_Task_Unique
@@ -211,6 +213,58 @@ package body Munin.Contexts is
                           To_Virtual_String
                             (Node.As_Basic_Decl.P_Fully_Qualified_Name),
                         Priority       => Priority_For (Node.As_Basic_Decl)));
+
+               --  A library-level object declaration of a named task/
+               --  protected type (e.g. `Object : Protected_Type;`) is a
+               --  concrete object too; classify it by the designated type's
+               --  kind, but never report the type declaration itself.
+               elsif Kind = Libadalang.Common.Ada_Defining_Name_List
+                 and then Node.Parent.Kind = Libadalang.Common.Ada_Object_Decl
+               then
+                  declare
+                     Object_Decl : constant Libadalang.Analysis.Basic_Decl :=
+                       Node.Parent.As_Basic_Decl;
+
+                     Type_Expr : constant Libadalang.Analysis.Type_Expr :=
+                       Object_Decl.P_Type_Expression;
+
+                     Designated_Type :
+                       constant Libadalang.Analysis.Base_Type_Decl :=
+                         (if Type_Expr.Is_Null
+                          then Libadalang.Analysis.No_Base_Type_Decl
+                          else Type_Expr.P_Designated_Type_Decl);
+
+                     Type_Decl : constant Libadalang.Analysis.Base_Type_Decl :=
+                       (if Designated_Type.Is_Null
+                        then Libadalang.Analysis.No_Base_Type_Decl
+                        else Designated_Type.P_Canonical_Type);
+
+                     Type_Kind :
+                       constant Libadalang.Common.Ada_Node_Kind_Type :=
+                         (if Type_Decl.Is_Null
+                          then Libadalang.Common.Ada_Node_Kind_Type'First
+                          else Type_Decl.Kind);
+                  begin
+                     if Type_Kind = Libadalang.Common.Ada_Protected_Type_Decl
+                     then
+                        Self.Protected_Items.Append
+                          (Munin.Protected_Objects.Create
+                             (Qualified_Name =>
+                                To_Virtual_String
+                                  (Name.P_Fully_Qualified_Name),
+                              Priority       => Priority_For (Type_Decl)));
+
+                     elsif Type_Kind = Libadalang.Common.Ada_Task_Type_Decl
+                     then
+                        Append_Task_Unique
+                          (Self,
+                           Munin.Tasks.Create
+                             (Qualified_Name =>
+                                To_Virtual_String
+                                  (Name.P_Fully_Qualified_Name),
+                              Priority       => Priority_For (Type_Decl)));
+                     end if;
+                  end;
                end if;
             end;
          exception
