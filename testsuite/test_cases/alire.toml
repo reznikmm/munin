@@ -8,7 +8,7 @@ version = "0.1.0-dev"
 
 licenses = "Apache-2.0 WITH LLVM-exception"
 
-project-files = ["priority/priority.gpr"]
+project-files = ["priority/priority.gpr", "callgraph/callgraph.gpr"]
 
 executables = []
 

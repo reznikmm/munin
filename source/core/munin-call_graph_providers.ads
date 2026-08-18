@@ -11,7 +11,7 @@ package Munin.Call_Graph_Providers is
    type Call_Graph_Provider is interface;
 
    type Call_Graph_Provider_Access is access all Call_Graph_Provider'Class
-     with Storage_Size => 0;
+   with Storage_Size => 0;
 
    type Call_Graph_Node is private;
 

@@ -6,6 +6,7 @@
 
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;
+with Test_Call_Graph_CI;
 with Test_Priority;
 with Test_Traverses;
 with Trendy_Test;
@@ -17,7 +18,8 @@ procedure Testsuite is
    Tests : constant Trendy_Test.Test_Group :=
      (Test_Priority.Test_Priority_Build'Access,
       Test_Traverses.Test_Each_Library_Level_Name'Access,
-      Test_Traverses.Test_Each_Effectively_Global_Name'Access);
+      Test_Traverses.Test_Each_Effectively_Global_Name'Access,
+      Test_Call_Graph_CI.Test_Call_Graph_CI_Build'Access);
 
    Results : Trendy_Test.Test_Report_Vectors.Vector;
 
@@ -32,6 +34,10 @@ begin
          Status : constant String := Report.Status'Image;
       begin
          Put_Line (Name & ": " & Status);
+
+         if Length (Report.Failure) > 0 then
+            Put_Line (To_String (Report.Failure));
+         end if;
       end;
    end loop;
 end Testsuite;
