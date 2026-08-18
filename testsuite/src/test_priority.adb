@@ -143,6 +143,8 @@ package body Test_Priority is
          Found_Object_Protected : Boolean := False;
          Found_Discriminant_10 : Boolean := False;
          Found_Discriminant_11 : Boolean := False;
+         Found_Pragma_Task : Boolean := False;
+         Found_Pragma_Protected : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -180,8 +182,8 @@ package body Test_Priority is
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
          begin
-            Op.Assert (Task_Items'Length = 4);
-            Op.Assert (Protected_Items'Length = 4);
+            Op.Assert (Task_Items'Length = 5);
+            Op.Assert (Protected_Items'Length = 5);
 
             for Item of Task_Items loop
                declare
@@ -220,6 +222,13 @@ package body Test_Priority is
                   then
                      if Priority.Has_Value and then Priority.Value = 18 then
                         Found_Object_Task := True;
+                     end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "pragma_task")
+                  then
+                     if Priority.Has_Value then
+                        Found_Pragma_Task := True;
                      end if;
                   end if;
                end;
@@ -267,6 +276,13 @@ package body Test_Priority is
                      if Priority.Has_Value and then Priority.Value = 11 then
                         Found_Discriminant_11 := True;
                      end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "pragma_register")
+                  then
+                     if Priority.Has_Value and then Priority.Value = 22 then
+                        Found_Pragma_Protected := True;
+                     end if;
                   end if;
                end;
             end loop;
@@ -280,6 +296,8 @@ package body Test_Priority is
          Op.Assert (Found_Object_Protected);
          Op.Assert (Found_Discriminant_10);
          Op.Assert (Found_Discriminant_11);
+         Op.Assert (Found_Pragma_Task);
+         Op.Assert (Found_Pragma_Protected);
       end;
    end Test_Priority_Build;
 

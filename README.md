@@ -45,6 +45,17 @@ and protected object, however it is expressed:
    Acc_11 : Accumulator (11);
    ```
 
+4. **Pre-aspect pragma** — the older `pragma Priority (...)`/
+   `pragma Interrupt_Priority (...)` form, recognized the same way as the
+   aspect syntax:
+
+   ```ada
+   protected Pragma_Register is
+      pragma Priority (22);
+      ...
+   end Pragma_Register;
+   ```
+
 ## Running Tests
 
 From the repository root, run:

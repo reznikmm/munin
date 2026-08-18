@@ -67,4 +67,25 @@ package body Priority_Sample is
 
    end Accumulator;
 
+   protected body Pragma_Register is
+
+      procedure Write (Value : Integer) is
+      begin
+         Data := Value;
+      end Write;
+
+      function Read return Integer is
+      begin
+         return Data;
+      end Read;
+
+   end Pragma_Register;
+
+   task body Pragma_Task is
+   begin
+      loop
+         delay 1.0;
+      end loop;
+   end Pragma_Task;
+
 end Priority_Sample;

@@ -34,6 +34,17 @@ Munin is an Ada tool that scans a `.gpr` project and reports concurrency objects
 8. Use dot notation for calls on tagged/class-wide values where available
    (`Node.Kind`), rather than the prefixed subprogram form
    (`Libadalang.Common.Kind (Node)`).
+9. Place an explanatory comment for a declaration after it, not before —
+   after the subprogram declaration (its spec, when a separate forward spec
+   is used) for a subprogram, or after the object declaration otherwise,
+   e.g.:
+   ```
+   function Pragma_Expr (Name : String) return Libadalang.Analysis.Expr;
+   --  Return the argument expression of a `pragma Name (...);` found
+   --  among Aspect_Decl's visible declarative items, if any.
+
+   function Pragma_Expr (Name : String) return Libadalang.Analysis.Expr is
+   ```
 
 ## Build And Test Commands
 

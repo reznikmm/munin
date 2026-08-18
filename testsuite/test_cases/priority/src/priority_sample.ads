@@ -61,4 +61,19 @@ package Priority_Sample is
    Acc_10 : Accumulator (Pr => 10);
    Acc_11 : Accumulator (11);
 
+   --  A protected object using the pre-aspect pragma syntax.
+   protected Pragma_Register is
+      pragma Priority (22);
+
+      procedure Write (Value : Integer);
+      function Read return Integer;
+   private
+      Data : Integer := 0;
+   end Pragma_Register;
+
+   --  A task using the pre-aspect pragma syntax for Interrupt_Priority.
+   task Pragma_Task is
+      pragma Interrupt_Priority (System.Interrupt_Priority'Last);
+   end Pragma_Task;
+
 end Priority_Sample;

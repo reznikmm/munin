@@ -3,6 +3,7 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
+with Ada.Characters.Handling;
 with Ada.Exceptions;
 
 with GNATCOLL.GMP.Integers;
@@ -108,10 +109,66 @@ package body Munin.Contexts is
       Aspect_Decl : constant Libadalang.Analysis.Basic_Decl'Class :=
         (if Type_Decl.Is_Null then Decl else Type_Decl);
 
-      function Aspect_Expr (Name : String) return Libadalang.Analysis.Expr
-      is (Aspect_Decl.P_Get_Aspect_Spec_Expr
-            (Langkit_Support.Text.To_Unbounded_Text
-               (Langkit_Support.Text.To_Text (Name))));
+      function Visible_Decls
+        (Decl : Libadalang.Analysis.Basic_Decl'Class)
+         return Libadalang.Analysis.Ada_Node_List
+      is (case Decl.Kind is
+            when Libadalang.Common.Ada_Task_Type_Decl_Range  =>
+              (if Decl.As_Task_Type_Decl.F_Definition.Is_Null
+               then Libadalang.Analysis.No_Ada_Node_List
+               else Decl.As_Task_Type_Decl.F_Definition.F_Public_Part.F_Decls),
+            when Libadalang.Common.Ada_Protected_Type_Decl   =>
+              Decl.As_Protected_Type_Decl.F_Definition.F_Public_Part.F_Decls,
+            when Libadalang.Common.Ada_Single_Protected_Decl =>
+              Decl.As_Single_Protected_Decl.F_Definition.F_Public_Part.F_Decls,
+            when others                                      =>
+              Libadalang.Analysis.No_Ada_Node_List);
+      --  Declarative items of the task/protected (type) declaration's
+      --  visible part, where a pre-aspect `pragma Priority (...);` /
+      --  `pragma Interrupt_Priority (...);` would be declared. Libadalang's
+      --  own P_Get_Pragma does not reliably find such a pragma for a task
+      --  declaration (unlike for a protected one), so it is searched for
+      --  manually here, uniformly for both.
+
+      function Pragma_Expr (Name : String) return Libadalang.Analysis.Expr;
+      --  Return the argument expression of a `pragma Name (...);` found
+      --  among Aspect_Decl's visible declarative items, if any.
+
+      function Pragma_Expr (Name : String) return Libadalang.Analysis.Expr is
+         Decls : constant Libadalang.Analysis.Ada_Node_List :=
+           Visible_Decls (Aspect_Decl);
+      begin
+         if not Decls.Is_Null then
+            for Item of Decls loop
+               if Item.Kind = Libadalang.Common.Ada_Pragma_Node
+                 and then Ada.Characters.Handling.To_Lower
+                            (String
+                               (Langkit_Support.Text.To_UTF8
+                                  (Item.As_Pragma_Node.F_Id.Text)))
+                          = Ada.Characters.Handling.To_Lower (Name)
+               then
+                  for Assoc of Item.As_Pragma_Node.F_Args loop
+                     return Assoc.P_Assoc_Expr;
+                  end loop;
+               end if;
+            end loop;
+         end if;
+
+         return Libadalang.Analysis.No_Expr;
+      end Pragma_Expr;
+
+      function Aspect_Expr (Name : String) return Libadalang.Analysis.Expr;
+      --  Both the modern aspect syntax (`with Priority => ...`) and the
+      --  older `pragma Priority (...);` form are recognized, in that order.
+
+      function Aspect_Expr (Name : String) return Libadalang.Analysis.Expr is
+         Spec_Expr : constant Libadalang.Analysis.Expr :=
+           Aspect_Decl.P_Get_Aspect_Spec_Expr
+             (Langkit_Support.Text.To_Unbounded_Text
+                (Langkit_Support.Text.To_Text (Name)));
+      begin
+         return (if Spec_Expr.Is_Null then Pragma_Expr (Name) else Spec_Expr);
+      end Aspect_Expr;
 
       Priority_Expr : constant Libadalang.Analysis.Expr :=
         Aspect_Expr ("Priority");
