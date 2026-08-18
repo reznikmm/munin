@@ -141,6 +141,8 @@ package body Test_Priority is
          Found_Interrupt_Task : Boolean := False;
          Found_Object_Task : Boolean := False;
          Found_Object_Protected : Boolean := False;
+         Found_Discriminant_10 : Boolean := False;
+         Found_Discriminant_11 : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -179,7 +181,7 @@ package body Test_Priority is
                 Munin.Contexts.Protected_Objects (Context);
          begin
             Op.Assert (Task_Items'Length = 4);
-            Op.Assert (Protected_Items'Length = 2);
+            Op.Assert (Protected_Items'Length = 4);
 
             for Item of Task_Items loop
                declare
@@ -232,9 +234,11 @@ package body Test_Priority is
                   Priority : constant Munin.Priorities.Optional_Priority :=
                     Munin.Protected_Objects.Priority (Item);
                begin
-                  --  A bare protected type declaration (Guard_Type) must
-                  --  never be reported; only the object (Guard) should be.
+                  --  Bare protected type declarations (Guard_Type,
+                  --  Accumulator) must never be reported; only their
+                  --  objects should be.
                   Op.Assert (not Contains (Name, "guard_type"));
+                  Op.Assert (not Contains (Name, "accumulator"));
 
                   if Contains (Name, "priority_sample")
                     and then Contains (Name, "shared_register")
@@ -249,6 +253,20 @@ package body Test_Priority is
                      if Priority.Has_Value and then Priority.Value = 15 then
                         Found_Object_Protected := True;
                      end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "acc_10")
+                  then
+                     if Priority.Has_Value and then Priority.Value = 10 then
+                        Found_Discriminant_10 := True;
+                     end if;
+
+                  elsif Contains (Name, "priority_sample")
+                    and then Contains (Name, "acc_11")
+                  then
+                     if Priority.Has_Value and then Priority.Value = 11 then
+                        Found_Discriminant_11 := True;
+                     end if;
                   end if;
                end;
             end loop;
@@ -260,6 +278,8 @@ package body Test_Priority is
          Op.Assert (Found_Interrupt_Task);
          Op.Assert (Found_Object_Task);
          Op.Assert (Found_Object_Protected);
+         Op.Assert (Found_Discriminant_10);
+         Op.Assert (Found_Discriminant_11);
       end;
    end Test_Priority_Build;
 

@@ -47,4 +47,18 @@ package Priority_Sample is
 
    Worker : Worker_Type;
 
+   --  A protected type whose priority is given by a discriminant, and two
+   --  library-level objects of it with different discriminant values (one
+   --  named, one positional). Each object should get its own priority.
+   protected type Accumulator (Pr : System.Any_Priority) with Priority => Pr
+   is
+      procedure Add (Value : Integer);
+      function Total return Integer;
+   private
+      Sum : Integer := 0;
+   end Accumulator;
+
+   Acc_10 : Accumulator (Pr => 10);
+   Acc_11 : Accumulator (11);
+
 end Priority_Sample;

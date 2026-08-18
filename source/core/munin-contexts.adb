@@ -52,8 +52,64 @@ package body Munin.Contexts is
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
       return Munin.Priorities.Optional_Priority
    is
+      function Build_Substitutions
+        (Constraints : Libadalang.Analysis.Param_Actual_Array)
+         return Libadalang.Analysis.Substitution_Array;
+
+      function Build_Substitutions
+        (Constraints : Libadalang.Analysis.Param_Actual_Array)
+         return Libadalang.Analysis.Substitution_Array
+      is
+         Result : Libadalang.Analysis.Substitution_Array (Constraints'Range);
+      begin
+         for Index in Constraints'Range loop
+            declare
+               Discriminant : constant Libadalang.Analysis.Basic_Decl :=
+                 Libadalang.Analysis.Param (Constraints (Index)).P_Basic_Decl;
+            begin
+               Result (Index) :=
+                 Libadalang.Analysis.Create_Substitution
+                   (From_Decl  => Discriminant,
+                    To_Value   =>
+                      Libadalang.Analysis.Actual (Constraints (Index))
+                        .P_Eval_As_Int,
+                    Value_Type =>
+                      Discriminant.P_Type_Expression.P_Designated_Type_Decl);
+            end;
+         end loop;
+
+         return Result;
+      end Build_Substitutions;
+
+      --  When Decl is a library-level object declaration of a named task/
+      --  protected type (e.g. `Object : Accumulator (Pr => 10);`), the
+      --  Priority/Interrupt_Priority aspect lives on the type, not the
+      --  object, and may reference one of the type's discriminants; resolve
+      --  both so a per-object priority can be evaluated using the object's
+      --  actual discriminant value.
+      Type_Expr : constant Libadalang.Analysis.Type_Expr :=
+        (if Decl.Kind = Libadalang.Common.Ada_Object_Decl
+         then Decl.P_Type_Expression
+         else Libadalang.Analysis.No_Type_Expr);
+
+      Designated_Type : constant Libadalang.Analysis.Base_Type_Decl :=
+        (if Type_Expr.Is_Null
+         then Libadalang.Analysis.No_Base_Type_Decl
+         else Type_Expr.P_Designated_Type_Decl);
+
+      Type_Decl : constant Libadalang.Analysis.Base_Type_Decl :=
+        (if Designated_Type.Is_Null
+         then Libadalang.Analysis.No_Base_Type_Decl
+         else Designated_Type.P_Canonical_Type);
+
+      --  The declaration that actually carries the Priority/
+      --  Interrupt_Priority aspect: the resolved type for an object
+      --  declaration, Decl itself for a task/protected (type) declaration.
+      Aspect_Decl : constant Libadalang.Analysis.Basic_Decl'Class :=
+        (if Type_Decl.Is_Null then Decl else Type_Decl);
+
       function Aspect_Expr (Name : String) return Libadalang.Analysis.Expr
-      is (Decl.P_Get_Aspect_Spec_Expr
+      is (Aspect_Decl.P_Get_Aspect_Spec_Expr
             (Langkit_Support.Text.To_Unbounded_Text
                (Langkit_Support.Text.To_Text (Name))));
 
@@ -68,21 +124,25 @@ package body Munin.Contexts is
          then Aspect_Expr ("Interrupt_Priority")
          else Priority_Expr);
 
+      --  Substitutions for the object's actual discriminant values, used to
+      --  evaluate a discriminant-dependent Priority/Interrupt_Priority
+      --  expression (Ada RM D.1); empty when Decl isn't an object
+      --  declaration or its type has no discriminants.
+      Substitutions : constant Libadalang.Analysis.Substitution_Array :=
+        (if Type_Expr.Is_Null
+         then []
+         else Build_Substitutions (Type_Expr.P_Discriminant_Constraints));
+
       function Evaluated_Priority return Munin.Priorities.Optional_Priority
       is (Munin.Priorities.Explicit_Priority
             (Integer'Value
-               (GNATCOLL.GMP.Integers.Image (Expr.P_Eval_As_Int))));
+               (GNATCOLL.GMP.Integers.Image
+                  (Expr.P_Eval_As_Int_In_Env (Substitutions)))));
    begin
       if Expr.Is_Null then
          return Munin.Priorities.Default_Priority;
       end if;
 
-      if Expr.P_Is_Static_Expr then
-         return Evaluated_Priority;
-      end if;
-
-      --  Libadalang can evaluate some target-dependent predefined attributes
-      --  even when the static-expression predicate is conservative.
       return Evaluated_Priority;
 
    exception
@@ -252,7 +312,7 @@ package body Munin.Contexts is
                              (Qualified_Name =>
                                 To_Virtual_String
                                   (Name.P_Fully_Qualified_Name),
-                              Priority       => Priority_For (Type_Decl)));
+                              Priority       => Priority_For (Object_Decl)));
 
                      elsif Type_Kind = Libadalang.Common.Ada_Task_Type_Decl
                      then
@@ -262,7 +322,7 @@ package body Munin.Contexts is
                              (Qualified_Name =>
                                 To_Virtual_String
                                   (Name.P_Fully_Qualified_Name),
-                              Priority       => Priority_For (Type_Decl)));
+                              Priority       => Priority_For (Object_Decl)));
                      end if;
                   end;
                end if;

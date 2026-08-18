@@ -53,4 +53,18 @@ package body Priority_Sample is
       end loop;
    end Worker_Type;
 
+   protected body Accumulator is
+
+      procedure Add (Value : Integer) is
+      begin
+         Sum := Sum + Value;
+      end Add;
+
+      function Total return Integer is
+      begin
+         return Sum;
+      end Total;
+
+   end Accumulator;
+
 end Priority_Sample;
