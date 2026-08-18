@@ -146,6 +146,8 @@ package body Test_Priority is
          Found_Pragma_Task : Boolean := False;
          Found_Pragma_Protected : Boolean := False;
          Found_Suspension_Object : Boolean := False;
+         Found_Task_Local_Global : Boolean := False;
+         Found_Main_Local_Global : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -184,7 +186,7 @@ package body Test_Priority is
                 Munin.Contexts.Protected_Objects (Context);
          begin
             Op.Assert (Task_Items'Length = 5);
-            Op.Assert (Protected_Items'Length = 6);
+            Op.Assert (Protected_Items'Length = 8);
 
             for Item of Task_Items loop
                declare
@@ -288,10 +290,27 @@ package body Test_Priority is
                      end if;
 
                   elsif Contains (Name, "priority_sample")
-                    and then Contains (Name, "ready")
+                    and then Contains (Name, ".ready")
                   then
                      if not Priority.Has_Value then
                         Found_Suspension_Object := True;
+                     end if;
+
+                  elsif Contains (Name, "telemetry")
+                    and then Contains (Name, "local_ready")
+                  then
+                     --  A Suspension_Object local to a (non-terminating)
+                     --  task's own first declarative section: effectively
+                     --  global, see Each_Effectively_Global_Name.
+                     if not Priority.Has_Value then
+                        Found_Task_Local_Global := True;
+                     end if;
+
+                  elsif Contains (Name, "main_ready") then
+                     --  Same, but local to main's own first declarative
+                     --  section.
+                     if not Priority.Has_Value then
+                        Found_Main_Local_Global := True;
                      end if;
                   end if;
                end;
@@ -309,6 +328,8 @@ package body Test_Priority is
          Op.Assert (Found_Pragma_Task);
          Op.Assert (Found_Pragma_Protected);
          Op.Assert (Found_Suspension_Object);
+         Op.Assert (Found_Task_Local_Global);
+         Op.Assert (Found_Main_Local_Global);
       end;
    end Test_Priority_Build;
 

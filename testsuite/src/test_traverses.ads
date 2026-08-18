@@ -15,4 +15,12 @@ package Test_Traverses is
    procedure Test_Each_Library_Level_Name
      (Op : in out Trendy_Test.Operation'Class);
 
+   procedure Test_Each_Effectively_Global_Name
+     (Op : in out Trendy_Test.Operation'Class);
+   --  Test module for
+   --  Munin.Contexts.Traverses.Each_Effectively_Global_Name: asserts on the
+   --  names it discovers in main's and a task's own first declarative
+   --  section, as opposed to Each_Library_Level_Name's proper library-level
+   --  names, which are covered above and must not be re-yielded here.
+
 end Test_Traverses;

@@ -16,7 +16,8 @@ procedure Testsuite is
 
    Tests : constant Trendy_Test.Test_Group :=
      (Test_Priority.Test_Priority_Build'Access,
-      Test_Traverses.Test_Each_Library_Level_Name'Access);
+      Test_Traverses.Test_Each_Library_Level_Name'Access,
+      Test_Traverses.Test_Each_Effectively_Global_Name'Access);
 
    Results : Trendy_Test.Test_Report_Vectors.Vector;
 

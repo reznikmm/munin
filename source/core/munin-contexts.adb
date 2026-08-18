@@ -422,6 +422,8 @@ package body Munin.Contexts is
       begin
          Munin.Contexts.Traverses.Each_Library_Level_Name
            (Self, Process_Name'Access);
+         Munin.Contexts.Traverses.Each_Effectively_Global_Name
+           (Self, Process_Name'Access);
       end;
 
    exception

@@ -73,6 +73,40 @@ Only the object (`Ready`) is reported, never the private type itself. Since
 the implementation lives in the runtime and isn't visible from the
 analyzed source, its priority is reported as `(Default)`.
 
+## Effectively Global Locals
+
+In a Ravenscar/Jorvik program, tasks never terminate, and the environment
+task waits for all of them before the partition completes (RM 10.2). So an
+object declared in the main subprogram's own first declarative section, or
+in a task's own first declarative section, is elaborated exactly once and
+lives for the whole program — exactly like a library-level object. Munin
+reports such objects too, under their own (nested) name, never the
+enclosing task/subprogram itself.
+
+Ravenscar/Jorvik's `No_Task_Hierarchy` and `No_Local_Protected_Objects`
+restrictions mean a task or protected object can never actually be
+declared this way — but an object of a private type whose full view is
+protected, such as `Ada.Synchronous_Task_Control.Suspension_Object`, is
+just an ordinary object declaration and isn't restricted, so this is the
+pattern that occurs in practice:
+
+```ada
+task body Telemetry is
+   Local_Ready : Ada.Synchronous_Task_Control.Suspension_Object;
+begin
+   ...
+end Telemetry;
+
+procedure Main is
+   Main_Ready : Ada.Synchronous_Task_Control.Suspension_Object;
+begin
+   ...
+end Main;
+```
+
+Both `Telemetry.Local_Ready` and `Main.Main_Ready` are reported, alongside
+every other discovered task and protected object.
+
 ## Running Tests
 
 From the repository root, run:

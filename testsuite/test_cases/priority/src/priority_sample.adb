@@ -2,9 +2,12 @@
 --
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+with Ada.Synchronous_Task_Control;
+
 package body Priority_Sample is
 
    task body Telemetry is
+      Local_Ready : Ada.Synchronous_Task_Control.Suspension_Object;
    begin
       loop
          delay 1.0;
