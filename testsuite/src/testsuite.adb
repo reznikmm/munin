@@ -6,8 +6,8 @@
 
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;
-with Test_Dummy;
 with Test_Priority;
+with Test_Traverses;
 with Trendy_Test;
 
 procedure Testsuite is
@@ -15,9 +15,8 @@ procedure Testsuite is
    use Ada.Strings.Unbounded;
 
    Tests : constant Trendy_Test.Test_Group :=
-     (Test_Dummy.Test_Basic_Arithmetic'Access,
-      Test_Dummy.Test_Comparison_Operations'Access,
-      Test_Priority.Test_Priority_Build'Access);
+     (Test_Priority.Test_Priority_Build'Access,
+      Test_Traverses.Test_Each_Library_Level_Name'Access);
 
    Results : Trendy_Test.Test_Report_Vectors.Vector;
 
@@ -28,7 +27,7 @@ begin
    Put_Line ("=== Testsuite Results ===");
    for Report of Results loop
       declare
-         Name : constant String := To_String (Report.Name);
+         Name   : constant String := To_String (Report.Name);
          Status : constant String := Report.Status'Image;
       begin
          Put_Line (Name & ": " & Status);
