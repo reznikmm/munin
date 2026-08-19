@@ -59,8 +59,10 @@ package Munin.Call_Graph_Providers is
 
    function Tasks (Self : Call_Graph_Provider) return Call_Graph_Node_Array
    is abstract;
-   --  Nodes for the task and main subprogram bodies known to Self, to use
-   --  as roots when walking the call tree.
+   --  Nodes for the task bodies and the environment task (the linked
+   --  program's actual entry point, calling the Ada main subprogram
+   --  indirectly through gnatbind's generated bind file) known to Self,
+   --  to use as roots when walking the call tree.
 
    function Image
      (Self : Call_Graph_Provider; Node : Call_Graph_Node)

@@ -476,8 +476,10 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    is
       function Is_Task_Or_Main
         (Symbol : VSS.Strings.Virtual_String) return Boolean;
-      --  True for a symbol matching GNAT's mangling for a task body or
-      --  for the environment task / main subprogram.
+      --  True for a symbol matching GNAT's mangling for a task body, or
+      --  for "main" -- the environment task, exported by gnatbind's
+      --  generated bind file under that fixed C link name regardless of
+      --  the actual main subprogram's own name.
 
       function Is_Task_Or_Main
         (Symbol : VSS.Strings.Virtual_String) return Boolean
@@ -488,9 +490,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
          return
            (Text'Length >= 3
             and then Text (Text'Last - 2 .. Text'Last) = "TKB")
-           or else
-             (Text'Length >= 5
-              and then Text (Text'First .. Text'First + 4) = "_ada_");
+           or else Text = "main";
       end Is_Task_Or_Main;
 
       Count : Natural := 0;

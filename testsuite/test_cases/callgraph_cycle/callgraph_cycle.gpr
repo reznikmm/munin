@@ -6,13 +6,13 @@
 with "runtime_build.gpr";
 with "ravenscar_build.gpr";
 
-project Callgraph is
+project Callgraph_Cycle is
 
    for Source_Dirs use ("src/");
    for Object_Dir use "obj/";
    for Create_Missing_Dirs use "True";
    for Exec_Dir use "bin";
-   for Main use ("hello_world.adb", "cycle_call.adb", "dynamic_call.adb");
+   for Main use ("cycle_call.adb");
 
    for Target use Runtime_Build'Target;
    for Runtime ("Ada") use Runtime_Build'Runtime ("Ada");
@@ -34,4 +34,4 @@ project Callgraph is
       for Artifacts (".") use ("share");
    end Install;
 
-end Callgraph;
+end Callgraph_Cycle;

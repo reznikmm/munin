@@ -65,10 +65,12 @@ package Munin.Call_Graph_Providers.CI_Databases is
      (Self : Database)
       return Munin.Call_Graph_Providers.Call_Graph_Node_Array;
    --  Nodes whose symbol matches GNAT's mangling for a task body (a
-   --  `TKB`-suffixed segment) or for the environment task / main
-   --  subprogram (`_ada_<name>`). A heuristic tied to GNAT's current
-   --  mangling convention -- `.ci` carries no explicit "this is a task"
-   --  tag -- not a guaranteed-stable contract.
+   --  `TKB`-suffixed segment), or is exactly `main` -- the environment
+   --  task, exported under that fixed C link name by gnatbind's
+   --  generated bind file regardless of the actual main subprogram's own
+   --  name. A heuristic tied to GNAT's current mangling and binding
+   --  convention -- `.ci` carries no explicit "this is a task" tag -- not
+   --  a guaranteed-stable contract.
 
    procedure Add_Entry
      (Self   : in out Database;
