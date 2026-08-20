@@ -11,6 +11,7 @@ with Munin.Protected_Objects;
 with Munin.Tasks;
 
 with Ada.Containers.Hashed_Sets;
+with Ada.Directories;
 with Ada.Strings;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
@@ -190,7 +191,8 @@ procedure Munin.CLI.Main is
          if Position.Is_Set then
             Ada.Text_IO.Put
               (" ("
-               & VSS.Strings.Conversions.To_UTF_8_String (Position.File)
+               & Ada.Directories.Simple_Name
+                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
                & ":"
                & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
                & ":"
