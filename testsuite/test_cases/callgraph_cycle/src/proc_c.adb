@@ -3,14 +3,9 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
---  exercises mutual recursion between Proc_A and Proc_B, and direct
---  self-recursion in Proc_C.
-
-with Proc_A;
-with Proc_C;
-
-procedure Cycle_Call is
+procedure Proc_C (Count : Natural) is
 begin
-   Proc_A (2);
-   Proc_C (2);
-end Cycle_Call;
+   if Count > 0 then
+      Proc_C (Count - 1);
+   end if;
+end Proc_C;

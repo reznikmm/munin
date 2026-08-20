@@ -15,6 +15,7 @@ Point Munin at a project's `.gpr` file and pick what to report:
 ```bash
 munin show priorities -P my_project.gpr
 munin show callgraph  -P my_project.gpr
+munin show cycles     -P my_project.gpr
 ```
 
 `show priorities` lists every discovered task and protected object with its
@@ -32,6 +33,12 @@ end Compiler;
 ```
 
 If no `.ci` file is found, Munin reports this and explains how to enable it.
+
+`show cycles` reports every group of mutually-recursive subprograms --
+either two or more subprograms forming a strongly connected component, or
+a single subprogram that calls itself directly -- reachable from a task
+body or the main subprogram, derived from the same `-fcallgraph-info=su,da`
+output as `show callgraph`.
 
 ## Priority Resolution
 

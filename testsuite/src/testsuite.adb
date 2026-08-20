@@ -7,6 +7,7 @@
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;
 with Test_Call_Graph_Cycle;
+with Test_Call_Graph_Cycles_Scc;
 with Test_Call_Graph_Dynamic;
 with Test_Call_Graph_Hello_World;
 with Test_Priority;
@@ -23,6 +24,7 @@ procedure Testsuite is
       Test_Traverses.Test_Each_Effectively_Global_Name'Access,
       Test_Call_Graph_Hello_World.Test_Call_Graph_Hello_World_Build'Access,
       Test_Call_Graph_Cycle.Test_Call_Graph_Cycle_Build'Access,
+      Test_Call_Graph_Cycles_Scc.Test_Call_Graph_Cycles_Scc_Build'Access,
       Test_Call_Graph_Dynamic.Test_Call_Graph_Dynamic_Build'Access);
 
    Results : Trendy_Test.Test_Report_Vectors.Vector;

@@ -3,6 +3,8 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
+with Ada.Containers;
+
 with VSS.Strings;
 
 package Munin.Call_Graph_Providers is
@@ -71,8 +73,15 @@ package Munin.Call_Graph_Providers is
    --  Node's linker symbol or otherwise mangled unique name, as known to
    --  Self; unlike Qualified_Name, always defined for every Node.
 
+   function Hash (Node : Call_Graph_Node) return Ada.Containers.Hash_Type;
+   --  Hash for Node, so it can be used as the key of an
+   --  Ada.Containers.Hashed_Maps.Map or Hashed_Sets.Set.
+
 private
 
    type Call_Graph_Node is new Integer;
+
+   function Hash (Node : Call_Graph_Node) return Ada.Containers.Hash_Type
+   is (Ada.Containers.Hash_Type (Node));
 
 end Munin.Call_Graph_Providers;

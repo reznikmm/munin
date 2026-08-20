@@ -26,7 +26,7 @@ package body Munin.CLI.Command_Line is
         (Name => "command", Description => "Command to run: show");
       Subject_Option : constant VSS.Command_Line.Positional_Option :=
         (Name        => "subject",
-         Description => "What to show: priorities, callgraph");
+         Description => "What to show: priorities, callgraph, cycles");
    begin
       Parser.Add_Option (Help_Option);
       Parser.Add_Option (Project_Option);
@@ -58,7 +58,7 @@ package body Munin.CLI.Command_Line is
       if Parser.Value (Command_Option) /= "show" then
          VSS.Command_Line.Report_Error
            (VSS.Strings.Conversions.To_Virtual_String
-              ("Expected command: show priorities|callgraph"));
+              ("Expected command: show priorities|callgraph|cycles"));
       end if;
 
       return Result : Command do
@@ -70,10 +70,13 @@ package body Munin.CLI.Command_Line is
          elsif Parser.Value (Subject_Option) = "callgraph" then
             Result.Subject := Show_Callgraph;
 
+         elsif Parser.Value (Subject_Option) = "cycles" then
+            Result.Subject := Show_Cycles;
+
          else
             VSS.Command_Line.Report_Error
               (VSS.Strings.Conversions.To_Virtual_String
-                 ("Expected subject: priorities or callgraph"));
+                 ("Expected subject: priorities, callgraph, or cycles"));
          end if;
       end return;
    end Parse;

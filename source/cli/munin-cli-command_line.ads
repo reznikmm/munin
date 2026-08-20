@@ -7,12 +7,13 @@
 --
 --    munin show priorities -P <project-file>
 --    munin show callgraph  -P <project-file>
+--    munin show cycles     -P <project-file>
 
 with VSS.Strings;
 
 package Munin.CLI.Command_Line is
 
-   type Subject_Kind is (Show_Priorities, Show_Callgraph);
+   type Subject_Kind is (Show_Priorities, Show_Callgraph, Show_Cycles);
 
    type Command is record
       Subject      : Subject_Kind;
@@ -20,9 +21,9 @@ package Munin.CLI.Command_Line is
    end record;
 
    function Parse return Command;
-   --  Parse VSS.Application.Arguments as `show priorities|callgraph -P
-   --  <project-file>`. On a parse error, an unknown/missing argument, or
-   --  -h/--help, reports the message and terminates the process (via
+   --  Parse VSS.Application.Arguments as `show priorities|callgraph|cycles
+   --  -P <project-file>`. On a parse error, an unknown/missing argument,
+   --  or -h/--help, reports the message and terminates the process (via
    --  VSS.Command_Line.Report_Error/Report_Message) instead of returning.
 
 end Munin.CLI.Command_Line;

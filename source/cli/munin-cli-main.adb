@@ -4,6 +4,7 @@
 ------------------------------------------------------------------
 
 with Munin.CLI.Command_Line;
+with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Contexts;
 with Munin.Priorities;
@@ -42,6 +43,11 @@ procedure Munin.CLI.Main is
    procedure Print_Call_Graph (Context : Munin.Contexts.Context);
    --  Print the call tree rooted at every task/main entry point known to
    --  Context's Call_Graph_Provider.
+
+   procedure Print_Cycles (Context : Munin.Contexts.Context);
+   --  Print every group of mutually-recursive subprograms found by
+   --  Munin.Call_Graph_Cycles.Cycles, rooted at Context's
+   --  Call_Graph_Provider's Tasks.
 
    function Pad_Right (Text : String; Width : Natural) return String is
    begin
@@ -235,6 +241,82 @@ procedure Munin.CLI.Main is
         ("--------------------------------------------------");
    end Print_Call_Graph;
 
+   procedure Print_Cycles (Context : Munin.Contexts.Context) is
+      Provider :
+        constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
+          Munin.Contexts.Call_Graph (Context);
+
+      procedure Print_Group
+        (Group : Munin.Call_Graph_Cycles.Cycle_Group; Index : Positive);
+
+      procedure Print_Group
+        (Group : Munin.Call_Graph_Cycles.Cycle_Group; Index : Positive) is
+      begin
+         Ada.Text_IO.Put_Line
+           ("Cycle "
+            & Ada.Strings.Fixed.Trim (Index'Image, Ada.Strings.Both)
+            & ":");
+
+         for Node of Group loop
+            declare
+               Qualified_Name : constant VSS.Strings.Virtual_String :=
+                 Provider.Qualified_Name (Node);
+               Name           : constant String :=
+                 VSS.Strings.Conversions.To_UTF_8_String
+                   (if Qualified_Name.Is_Empty
+                    then Provider.Image (Node)
+                    else Qualified_Name);
+               Position       :
+                 constant Munin.Call_Graph_Providers.Optional_Position :=
+                   Provider.Position (Node);
+            begin
+               Ada.Text_IO.Put ("  " & Name);
+
+               if Position.Is_Set then
+                  Ada.Text_IO.Put
+                    (" ("
+                     & Ada.Directories.Simple_Name
+                         (VSS.Strings.Conversions.To_UTF_8_String
+                            (Position.File))
+                     & ":"
+                     & Ada.Strings.Fixed.Trim
+                         (Position.Line'Image, Ada.Strings.Both)
+                     & ":"
+                     & Ada.Strings.Fixed.Trim
+                         (Position.Column'Image, Ada.Strings.Both)
+                     & ")");
+               end if;
+
+               Ada.Text_IO.New_Line;
+            end;
+         end loop;
+      end Print_Group;
+
+      Groups : Munin.Call_Graph_Cycles.Cycle_Groups;
+   begin
+      if Provider = null then
+         VSS.Command_Line.Report_Error
+           (Munin.Contexts.Call_Graph_Error (Context));
+      end if;
+
+      Groups := Munin.Call_Graph_Cycles.Cycles (Provider.all);
+
+      Ada.Text_IO.Put_Line ("Cycles:");
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+
+      if Groups.Is_Empty then
+         Ada.Text_IO.Put_Line ("No cycles found.");
+      else
+         for Index in 1 .. Groups.Last_Index loop
+            Print_Group (Groups (Index), Index);
+         end loop;
+      end if;
+
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+   end Print_Cycles;
+
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
@@ -263,6 +345,9 @@ begin
 
          when Munin.CLI.Command_Line.Show_Callgraph  =>
             Print_Call_Graph (Context);
+
+         when Munin.CLI.Command_Line.Show_Cycles     =>
+            Print_Cycles (Context);
       end case;
    end;
 end Munin.CLI.Main;
