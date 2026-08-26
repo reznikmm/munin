@@ -3,6 +3,10 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
-package Munin.CLI is
-   pragma Preelaborate;
-end Munin.CLI;
+with Guard_Pkg;
+pragma Unreferenced (Guard_Pkg);
+
+procedure Callgraph_Entry is
+begin
+   null;
+end Callgraph_Entry;

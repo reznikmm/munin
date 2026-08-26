@@ -8,6 +8,7 @@ with GPR2.Project.Tree;
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.CI;
 with Munin.Call_Graph_Providers.CI_Databases;
+with Munin.Entry_Calls;
 with Test_Build_Support;
 with Test_Call_Graph_Support;
 with Trendy_Test.Assertions;
@@ -39,6 +40,7 @@ package body Test_Call_Graph_Cycle is
          Tree     : GPR2.Project.Tree.Object;
          Options  : GPR2.Options.Object := GPR2.Options.Empty_Options;
          Provider : aliased Munin.Call_Graph_Providers.CI.CI_Provider;
+         Empty    : Munin.Entry_Calls.Entry_Call_Register;
          Error    : VSS.Strings.Virtual_String;
       begin
          GPR2.Options.Add_Switch
@@ -57,7 +59,8 @@ package body Test_Call_Graph_Cycle is
             return;
          end if;
 
-         Munin.Call_Graph_Providers.CI.Initialize (Provider, Tree, Error);
+         Munin.Call_Graph_Providers.CI.Initialize
+           (Provider, Tree, Empty, Error);
 
          if not Error.Is_Empty then
             Trendy_Test.Assertions.Fail
@@ -93,9 +96,11 @@ package body Test_Call_Graph_Cycle is
             --  Resolve (dormant future-feature machinery) must terminate
             --  on the Proc_A/Proc_B cycle and flag it as such.
             declare
-               Usage : constant
-                 Munin.Call_Graph_Providers.CI_Databases.Resolve_Result :=
-                   Provider.Resolve (Proc_A);
+               Usage :
+                 constant Munin
+                            .Call_Graph_Providers
+                            .CI_Databases
+                            .Resolve_Result := Provider.Resolve (Proc_A);
             begin
                Op.Assert (Usage.Cycle);
                Op.Assert (Usage.Stack_Used > 0);

@@ -6,6 +6,7 @@
 with Ada.Containers;
 
 with VSS.Strings;
+with VSS.Strings.Hash;
 
 package Munin.Call_Graph_Providers is
    pragma Preelaborate;
@@ -18,18 +19,6 @@ package Munin.Call_Graph_Providers is
    type Call_Graph_Node is private;
 
    type Call_Graph_Node_Array is array (Positive range <>) of Call_Graph_Node;
-
-   type Optional_Position (Is_Set : Boolean := False) is record
-      case Is_Set is
-         when False =>
-            null;
-
-         when True =>
-            File   : VSS.Strings.Virtual_String;
-            Line   : Positive;
-            Column : Positive;
-      end case;
-   end record;
 
    function Callees
      (Self : Call_Graph_Provider; Node : Call_Graph_Node)
@@ -66,6 +55,18 @@ package Munin.Call_Graph_Providers is
    --  indirectly through gnatbind's generated bind file) known to Self,
    --  to use as roots when walking the call tree.
 
+   function Is_Entry
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
+   is abstract;
+   --  True when Node is a protected entry's body. A call to a protected
+   --  entry cannot generally be attributed to a specific entry from the
+   --  call graph alone (every entry call in a program can compile down to
+   --  one shared runtime dispatcher); a provider that resolves this some
+   --  other way and rewrites the graph accordingly (see
+   --  Munin.Call_Graph_Providers.CI) reports the resolved node here for
+   --  diagnostic purposes. Always False for a provider that does not do
+   --  such a resolution.
+
    function Image
      (Self : Call_Graph_Provider; Node : Call_Graph_Node)
       return VSS.Strings.Virtual_String
@@ -79,9 +80,19 @@ package Munin.Call_Graph_Providers is
 
 private
 
+   use type Ada.Containers.Hash_Type;
+
    type Call_Graph_Node is new Integer;
 
    function Hash (Node : Call_Graph_Node) return Ada.Containers.Hash_Type
    is (Ada.Containers.Hash_Type (Node));
+
+   function Hash (Position : Optional_Position) return Ada.Containers.Hash_Type
+   is (if not Position.Is_Set
+       then 0
+       else
+         VSS.Strings.Hash (Position.File)
+         xor Ada.Containers.Hash_Type (Position.Line)
+         xor Ada.Containers.Hash_Type (Position.Column));
 
 end Munin.Call_Graph_Providers;

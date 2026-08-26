@@ -8,11 +8,11 @@ with Libadalang.Analysis;
 package Munin.Contexts.Traverses is
 
    procedure Each_Library_Level_Name
-     (Self   : Munin.Contexts.Context;
+     (Self   : Munin.Contexts.Context'Class;
       Action : access procedure (Name : Libadalang.Analysis.Defining_Name));
 
    procedure Each_Effectively_Global_Name
-     (Self   : Munin.Contexts.Context;
+     (Self   : Munin.Contexts.Context'Class;
       Action : access procedure (Name : Libadalang.Analysis.Defining_Name));
    --  In a Ravenscar/Jorvik program, tasks never terminate and the
    --  environment task waits for all of them before the partition

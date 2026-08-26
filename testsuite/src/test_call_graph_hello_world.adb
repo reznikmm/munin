@@ -7,6 +7,7 @@ with GPR2.Options;
 with GPR2.Project.Tree;
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.CI;
+with Munin.Entry_Calls;
 with Test_Build_Support;
 with Test_Call_Graph_Support;
 with Trendy_Test.Assertions;
@@ -39,6 +40,7 @@ package body Test_Call_Graph_Hello_World is
          Tree     : GPR2.Project.Tree.Object;
          Options  : GPR2.Options.Object := GPR2.Options.Empty_Options;
          Provider : aliased Munin.Call_Graph_Providers.CI.CI_Provider;
+         Empty    : Munin.Entry_Calls.Entry_Call_Register;
          Error    : VSS.Strings.Virtual_String;
       begin
          GPR2.Options.Add_Switch
@@ -57,7 +59,11 @@ package body Test_Call_Graph_Hello_World is
             return;
          end if;
 
-         Munin.Call_Graph_Providers.CI.Initialize (Provider, Tree, Error);
+         Munin.Call_Graph_Providers.CI.Initialize
+           (Provider,
+            Tree,
+            Empty,
+            Error);
 
          if not Error.Is_Empty then
             Trendy_Test.Assertions.Fail
@@ -68,8 +74,8 @@ package body Test_Call_Graph_Hello_World is
          end if;
 
          declare
-            Tasks : constant
-              Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
+            Tasks :
+              constant Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
                 Provider.Tasks;
          begin
             --  A single main and no tasks: the environment task (`main`,
@@ -82,8 +88,8 @@ package body Test_Call_Graph_Hello_World is
          end;
 
          declare
-            Hello_World_Node : constant
-              Munin.Call_Graph_Providers.Call_Graph_Node :=
+            Hello_World_Node :
+              constant Munin.Call_Graph_Providers.Call_Graph_Node :=
                 Test_Call_Graph_Support.Node_Of (Provider, "_ada_hello_world");
          begin
             Op.Assert

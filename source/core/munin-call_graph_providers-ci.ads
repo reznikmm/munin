@@ -9,6 +9,7 @@
 
 with GPR2.Project.Tree;
 
+with Munin.Entry_Calls;
 with VSS.String_Vectors;
 with VSS.Strings;
 
@@ -37,12 +38,17 @@ package Munin.Call_Graph_Providers.CI is
    overriding
    function Position
      (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Optional_Position;
+      return Munin.Optional_Position;
 
    overriding
    function Tasks
      (Self : CI_Provider)
       return Munin.Call_Graph_Providers.Call_Graph_Node_Array;
+
+   overriding
+   function Is_Entry
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
 
    overriding
    function Image
@@ -87,11 +93,19 @@ package Munin.Call_Graph_Providers.CI is
    --  runtime sources), one per compiled Ada source that produced one.
 
    procedure Initialize
-     (Self  : in out CI_Provider;
-      Tree  : GPR2.Project.Tree.Object;
-      Error : out VSS.Strings.Virtual_String);
+     (Self        : in out CI_Provider;
+      Tree        : GPR2.Project.Tree.Object;
+      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register;
+      Error       : out VSS.Strings.Virtual_String);
    --  Find (via Find_CI_Files) and load every `.ci` file for Tree's
    --  project closure into Self. Error is left empty on success.
+   --
+   --  Entry_Calls Register is forwarded to Munin.Call_Graph_Providers.
+   --  CI_Databases.Complete -- see there for how it lets a protected
+   --  entry call be attributed to the entry it actually calls; pass an
+   --  empty map to skip that resolution (every entry call is then left
+   --  pointing at GNAT's generic runtime dispatcher, as it is in the raw
+   --  `.ci` data).
    --
    --  When no `.ci` file is found at all, Error explains that the
    --  project needs to be (re)built with GCC's

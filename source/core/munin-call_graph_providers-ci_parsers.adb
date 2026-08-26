@@ -72,8 +72,11 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Start
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit);
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit);
    --  start \
    --      : GRAPH COLON OPEN_BRACE title graph_contents CLOSE_BRACE
    --      | GRAPH COLON OPEN_BRACE title CLOSE_BRACE
@@ -84,16 +87,22 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Graph_Contents
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit);
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit);
    --  graph_contents \
    --      : graph_item graph_contents
    --      | graph_item
 
    procedure Parse_Graph_Item
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit);
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit);
    --  graph_item \
    --      : class
    --      | node
@@ -110,14 +119,20 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Node
      (Self  : in out Parser_State;
-      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                       .Subprogram_Node);
+      Value :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Subprogram_Node);
    --  node : NODE COLON OPEN_BRACE title node_content CLOSE_BRACE
 
    procedure Parse_Node_Content
      (Self  : in out Parser_State;
-      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                       .Subprogram_Node);
+      Value :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Subprogram_Node);
    --  node_content \
    --      : internal_node
    --      | external_node
@@ -146,8 +161,11 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse
      (Stream : in out VSS.Text_Streams.Input_Text_Stream'Class;
-      Unit   : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                        .Compilation_Unit;
+      Unit   :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit;
       Error  : out VSS.Strings.Virtual_String)
    is
       State : Parser_State :=
@@ -245,19 +263,19 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
       end loop;
 
       case Self.Char is
-         when '}' =>
+         when '}'    =>
             Expect_String (Self, Char);
             Self.Token := CLOSE_BRACE;
 
-         when '{' =>
+         when '{'    =>
             Expect_String (Self, Char);
             Self.Token := OPEN_BRACE;
 
-         when ':' =>
+         when ':'    =>
             Expect_String (Self, Char);
             Self.Token := COLON;
 
-         when 'c' =>
+         when 'c'    =>
             Expect_String (Self, "class");
             Self.Token := CLASS;
 
@@ -266,7 +284,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
                Self.Token := CLASSNAME;
             end if;
 
-         when 'e' =>
+         when 'e'    =>
             Expect_String (Self, Char);
 
             if Self.Char = 'd' then
@@ -277,23 +295,23 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
                Self.Token := ELLIPSE;
             end if;
 
-         when 'g' =>
+         when 'g'    =>
             Expect_String (Self, "graph");
             Self.Token := GRAPH;
 
-         when 'l' =>
+         when 'l'    =>
             Expect_String (Self, "label");
             Self.Token := LABEL;
 
-         when 'n' =>
+         when 'n'    =>
             Expect_String (Self, "node");
             Self.Token := NODE;
 
-         when 'p' =>
+         when 'p'    =>
             Expect_String (Self, "parent");
             Self.Token := PARENT;
 
-         when 's' =>
+         when 's'    =>
             Expect_String (Self, Char);
 
             if Self.Char = 'h' then
@@ -304,7 +322,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
                Self.Token := SOURCENAME;
             end if;
 
-         when 't' =>
+         when 't'    =>
             Expect_String (Self, Char);
 
             if Self.Char = 'a' then
@@ -315,11 +333,11 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
                Self.Token := TITLE;
             end if;
 
-         when 'v' =>
+         when 'v'    =>
             Expect_String (Self, "virtuals");
             Self.Token := VIRTUALS;
 
-         when '"' =>
+         when '"'    =>
             Expect_String (Self, Char);
             Self.Token := STRING;
             Self.String.Clear;
@@ -368,8 +386,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Edge
      (Self  : in out Parser_State;
-      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units.Call)
-   is
+      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units.Call) is
    begin
       Expect_Token (Self, EDGE);
       Expect_Token (Self, COLON);
@@ -403,9 +420,11 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Graph_Contents
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit)
-   is
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit) is
    begin
       while Self.Success loop
          Parse_Graph_Item (Self, Unit);
@@ -420,18 +439,23 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Graph_Item
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit)
-   is
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit) is
    begin
       case Self.Token is
-         when CLASS =>
+         when CLASS  =>
             Parse_Class (Self);  --  class, ignored
 
-         when NODE =>
+         when NODE   =>
             declare
-               Node : Munin.Call_Graph_Providers.CI_Compilation_Units
-                        .Subprogram_Node;
+               Node :
+                 Munin
+                   .Call_Graph_Providers
+                   .CI_Compilation_Units
+                   .Subprogram_Node;
             begin
                Parse_Node (Self, Node);
 
@@ -442,7 +466,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
                end if;
             end;
 
-         when EDGE =>
+         when EDGE   =>
             declare
                Edge : Munin.Call_Graph_Providers.CI_Compilation_Units.Call;
             begin
@@ -461,8 +485,8 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Node
      (Self  : in out Parser_State;
-      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                       .Subprogram_Node)
+      Value :
+        in out Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node)
    is
    begin
       Expect_Token (Self, NODE);
@@ -481,8 +505,8 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Node_Content
      (Self  : in out Parser_State;
-      Value : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                       .Subprogram_Node)
+      Value :
+        in out Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node)
    is
       function To_Int (Text : VSS.Strings.Virtual_String) return Natural
       is (Natural'Wide_Wide_Value
@@ -503,7 +527,8 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
          Expect_Token (Self, COLON);
          Expect_Token (Self, ELLIPSE);
 
-      elsif Self.Token = SHAPE then  --  external node
+      elsif Self.Token = SHAPE then
+         --  external node
          Expect_Token (Self, SHAPE);
          Expect_Token (Self, COLON);
          Expect_Token (Self, ELLIPSE);
@@ -511,8 +536,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
          Match :=
            External_Matcher.Match
              (Content,
-              Options =>
-                [VSS.Regular_Expressions.Anchored_Match => True]);
+              Options => [VSS.Regular_Expressions.Anchored_Match => True]);
 
          if not Match.Has_Match then
             raise Program_Error
@@ -522,7 +546,8 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
          Value.Name := Match.Captured (1);
          Value.Source := Match.Captured (2);
 
-      else  --  internal node
+      else
+         --  internal node
          Match := Internal_Matcher.Match (Content);
 
          if not Match.Has_Match then
@@ -546,9 +571,11 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
 
    procedure Parse_Start
      (Self : in out Parser_State;
-      Unit : in out Munin.Call_Graph_Providers.CI_Compilation_Units
-                      .Compilation_Unit)
-   is
+      Unit :
+        in out Munin
+                 .Call_Graph_Providers
+                 .CI_Compilation_Units
+                 .Compilation_Unit) is
    begin
       Expect_Token (Self, GRAPH);
       Expect_Token (Self, COLON);
@@ -568,8 +595,7 @@ package body Munin.Call_Graph_Providers.CI_Parsers is
    -----------------
 
    procedure Parse_Title
-     (Self : in out Parser_State; Value : out VSS.Strings.Virtual_String)
-   is
+     (Self : in out Parser_State; Value : out VSS.Strings.Virtual_String) is
    begin
       Expect_Token (Self, TITLE);
       Expect_Token (Self, COLON);

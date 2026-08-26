@@ -62,8 +62,7 @@ package body Munin.Call_Graph_Providers.CI is
    procedure Add_Entry
      (Self   : in out CI_Provider;
       Symbol : VSS.Strings.Virtual_String;
-      Size   : Natural)
-   is
+      Size   : Natural) is
    begin
       Self.DB.Add_Entry (Symbol, Size);
    end Add_Entry;
@@ -75,8 +74,7 @@ package body Munin.Call_Graph_Providers.CI is
    procedure Add_Indirect_Call_Target
      (Self   : in out CI_Provider;
       Caller : VSS.String_Vectors.Virtual_String_Vector;
-      Target : VSS.Strings.Virtual_String)
-   is
+      Target : VSS.Strings.Virtual_String) is
    begin
       Self.DB.Add_Indirect_Call_Target (Caller, Target);
    end Add_Indirect_Call_Target;
@@ -117,8 +115,7 @@ package body Munin.Call_Graph_Providers.CI is
            Include_Extended   => True,
            Include_Aggregated => True)
       loop
-         if not View.Is_Runtime
-           and then View.Kind in GPR2.With_Object_Dir_Kind
+         if not View.Is_Runtime and then View.Kind in GPR2.With_Object_Dir_Kind
          then
             Add_CI_Files_In (View.Object_Directory.String_Value, Result);
          end if;
@@ -137,14 +134,25 @@ package body Munin.Call_Graph_Providers.CI is
       return VSS.Strings.Virtual_String
    is (Self.DB.Image (Node));
 
+   --------------
+   -- Is_Entry --
+   --------------
+
+   overriding
+   function Is_Entry
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.DB.Is_Entry (Node));
+
    ----------------
    -- Initialize --
    ----------------
 
    procedure Initialize
-     (Self  : in out CI_Provider;
-      Tree  : GPR2.Project.Tree.Object;
-      Error : out VSS.Strings.Virtual_String)
+     (Self        : in out CI_Provider;
+      Tree        : GPR2.Project.Tree.Object;
+      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register;
+      Error       : out VSS.Strings.Virtual_String)
    is
       Files      : constant VSS.String_Vectors.Virtual_String_Vector :=
         Find_CI_Files (Tree);
@@ -206,7 +214,7 @@ package body Munin.Call_Graph_Providers.CI is
          return;
       end if;
 
-      Self.DB.Complete;
+      Self.DB.Complete (Entry_Calls);
    end Initialize;
 
    ---------------------
@@ -216,8 +224,7 @@ package body Munin.Call_Graph_Providers.CI is
    procedure Load_Extra_Data
      (Self   : in out CI_Provider;
       Path   : VSS.Strings.Virtual_String;
-      Errors : out VSS.String_Vectors.Virtual_String_Vector)
-   is
+      Errors : out VSS.String_Vectors.Virtual_String_Vector) is
    begin
       Munin.Call_Graph_Providers.CI_Extra_Data.Read_JSON
         (Self.DB, Path, Errors);
@@ -240,7 +247,7 @@ package body Munin.Call_Graph_Providers.CI is
    overriding
    function Position
      (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Optional_Position
+      return Munin.Optional_Position
    is (Self.DB.Position (Node));
 
    -------------

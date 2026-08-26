@@ -120,7 +120,7 @@ package body Munin.Contexts.Traverses is
    end Visit;
 
    procedure Each_Library_Level_Name
-     (Self   : Munin.Contexts.Context;
+     (Self   : Munin.Contexts.Context'Class;
       Action : access procedure (Name : Libadalang.Analysis.Defining_Name)) is
    begin
       for File_Name of Self.Sources loop
@@ -161,7 +161,7 @@ package body Munin.Contexts.Traverses is
    end Scan_Decls;
 
    procedure Each_Effectively_Global_Name
-     (Self   : Munin.Contexts.Context;
+     (Self   : Munin.Contexts.Context'Class;
       Action : access procedure (Name : Libadalang.Analysis.Defining_Name))
    is
       procedure Recurse_If_Task (Node : Libadalang.Analysis.Ada_Node);

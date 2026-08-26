@@ -188,9 +188,8 @@ procedure Munin.CLI.Main is
          Name           : constant String :=
            VSS.Strings.Conversions.To_UTF_8_String
              (if Qualified_Name.Is_Empty then Image else Qualified_Name);
-         Position       :
-           constant Munin.Call_Graph_Providers.Optional_Position :=
-             Provider.Position (Node);
+         Position       : constant Munin.Optional_Position :=
+           Provider.Position (Node);
       begin
          Ada.Text_IO.Put ((1 .. Depth * 2 => ' ') & Name);
 
@@ -266,9 +265,8 @@ procedure Munin.CLI.Main is
                    (if Qualified_Name.Is_Empty
                     then Provider.Image (Node)
                     else Qualified_Name);
-               Position       :
-                 constant Munin.Call_Graph_Providers.Optional_Position :=
-                   Provider.Position (Node);
+               Position       : constant Munin.Optional_Position :=
+                 Provider.Position (Node);
             begin
                Ada.Text_IO.Put ("  " & Name);
 

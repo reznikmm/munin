@@ -9,6 +9,7 @@ with GPR2.Project.Tree;
 with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.CI;
+with Munin.Entry_Calls;
 with Test_Build_Support;
 with Test_Call_Graph_Support;
 with Trendy_Test.Assertions;
@@ -40,6 +41,7 @@ package body Test_Call_Graph_Cycles_Scc is
          Tree     : GPR2.Project.Tree.Object;
          Options  : GPR2.Options.Object := GPR2.Options.Empty_Options;
          Provider : aliased Munin.Call_Graph_Providers.CI.CI_Provider;
+         Empty    : Munin.Entry_Calls.Entry_Call_Register;
          Error    : VSS.Strings.Virtual_String;
       begin
          GPR2.Options.Add_Switch
@@ -58,7 +60,8 @@ package body Test_Call_Graph_Cycles_Scc is
             return;
          end if;
 
-         Munin.Call_Graph_Providers.CI.Initialize (Provider, Tree, Error);
+         Munin.Call_Graph_Providers.CI.Initialize
+           (Provider, Tree, Empty, Error);
 
          if not Error.Is_Empty then
             Trendy_Test.Assertions.Fail
@@ -83,8 +86,7 @@ package body Test_Call_Graph_Cycles_Scc is
             Self_Loop_Found        : Boolean := False;
          begin
             for Group of Groups loop
-               if Group.Contains (Proc_A) and then Group.Contains (Proc_B)
-               then
+               if Group.Contains (Proc_A) and then Group.Contains (Proc_B) then
                   Op.Assert (Group.Length = 2);
                   Mutual_Recursion_Found := True;
                end if;

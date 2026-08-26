@@ -13,6 +13,13 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    --  GCC's placeholder target symbol for a call through a pointer, whose
    --  real target it cannot know statically.
 
+   Entry_Call_Dispatcher : constant VSS.Strings.Virtual_String :=
+     "system__tasking__protected_objects__operations__protected_entry_call";
+   --  GNAT's generic runtime routine every unconditional protected entry
+   --  call compiles down to, indistinguishably; confirmed identical under
+   --  both the native runtime and the Ravenscar/Jorvik cross runtime
+   --  Munin targets (`light_tasking_rp2040`).
+
    function "+" (Left, Right : Resolve_Result) return Resolve_Result
    is (Natural'Max (Left.Stack_Used, Right.Stack_Used),
        Left.Indirect_Calls + Right.Indirect_Calls,
@@ -32,8 +39,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    is (if Node.Is_External then 0 else Node.Dynamic_Objects);
 
    function To_Position
-     (Text : VSS.Strings.Virtual_String)
-      return Munin.Call_Graph_Providers.Optional_Position;
+     (Text : VSS.Strings.Virtual_String) return Munin.Optional_Position;
    --  Decompose a `file:line:column` string (as captured from a `.ci`
    --  label) into its parts; anything that doesn't split into exactly
    --  three ':'-separated tokens (e.g. `<built-in>`) has no position.
@@ -57,8 +63,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    is (Self.Symbols (Positive (Node)));
 
    function Known_Indirect_Call
-     (Self  : Database;
-      Trace : VSS.String_Vectors.Virtual_String_Vector)
+     (Self : Database; Trace : VSS.String_Vectors.Virtual_String_Vector)
       return VSS.Strings.Virtual_String;
    --  The known target for an indirect call reached through the given
    --  calling chain (innermost last), an empty (but non-null) string when
@@ -88,8 +93,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    procedure Add_Entry
      (Self   : in out Database;
       Symbol : VSS.Strings.Virtual_String;
-      Size   : Natural)
-   is
+      Size   : Natural) is
    begin
       Self.Top.Append ((Symbol, Size));
    end Add_Entry;
@@ -127,9 +131,9 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       end if;
 
       return
-        Result :
-          Munin.Call_Graph_Providers.Call_Graph_Node_Array
-            (1 .. Natural (Self.Edges (Symbol).Length))
+         Result :
+           Munin.Call_Graph_Providers.Call_Graph_Node_Array
+             (1 .. Natural (Self.Edges (Symbol).Length))
       do
          declare
             Index : Positive := Result'First;
@@ -157,9 +161,9 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       end if;
 
       return
-        Result :
-          Munin.Call_Graph_Providers.Call_Graph_Node_Array
-            (1 .. Natural (Self.Reverse_Edges (Symbol).Length))
+         Result :
+           Munin.Call_Graph_Providers.Call_Graph_Node_Array
+             (1 .. Natural (Self.Reverse_Edges (Symbol).Length))
       do
          declare
             Index : Positive := Result'First;
@@ -176,8 +180,99 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    -- Complete --
    --------------
 
-   procedure Complete (Self : in out Database) is
+   procedure Complete
+     (Self        : in out Database;
+      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register)
+   is
+      package Position_To_Symbol_Maps is new
+        Ada.Containers.Hashed_Maps
+          (Key_Type        => Munin.Position,
+           Element_Type    => VSS.Strings.Virtual_String,
+           Hash            => Munin.Call_Graph_Providers.Hash,
+           Equivalent_Keys => Munin."=");
+
+      Node_By_Position : Position_To_Symbol_Maps.Map;
+      --  Every internal/external node's own position, from its `.ci`
+      --  label, mapped back to its symbol. Ambiguous when more than one
+      --  node shares a position (true of a protected procedure/function's
+      --  locked/unprotected node pair, which both carry the position of
+      --  their common source declaration) but only ever queried below
+      --  with an *entry body's* position, which is not shared with
+      --  anything else (confirmed empirically: an entry's barrier and
+      --  body nodes sit at distinct positions).
+
+      function Resolved_Target
+        (Edge : Munin.Call_Graph_Providers.CI_Compilation_Units.Call)
+         return VSS.Strings.Virtual_String;
+      --  Edge.Target, unless Edge calls GNAT's generic protected
+      --  entry-call dispatcher and Entry_Call_Targets/Node_By_Position
+      --  can resolve its call-site position to a specific entry body
+      --  already known to Self.
+
+      function Resolved_Target
+        (Edge : Munin.Call_Graph_Providers.CI_Compilation_Units.Call)
+         return VSS.Strings.Virtual_String is
+      begin
+         --  Cheap check first: To_Position parses Edge.Label, which for an
+         --  ordinary edge (the vast majority) may not even describe a real
+         --  source position (e.g. a compiler-generated helper's edge can
+         --  carry a `0` line or column) -- fine to skip entirely unless
+         --  Edge might actually be one that needs resolving.
+         if Edge.Target /= Entry_Call_Dispatcher then
+            return Edge.Target;
+         end if;
+
+         declare
+            Call_Site : constant Munin.Optional_Position :=
+              To_Position (Edge.Label);
+
+            Target : constant Munin.Optional_Position :=
+              (if Call_Site.Is_Set
+               then Entry_Calls.Target (Call_Site)
+               else (Is_Set => False));
+         begin
+            return
+              (if Target.Is_Set and then Node_By_Position.Contains (Target)
+               then Node_By_Position (Target)
+               else Edge.Target);
+         end;
+      end Resolved_Target;
    begin
+      for Cursor in Self.Sources.Iterate loop
+         declare
+            Symbol   : constant VSS.Strings.Virtual_String :=
+              Node_Maps.Key (Cursor);
+            Position : constant Munin.Optional_Position :=
+              To_Position (Node_Maps.Element (Cursor).Node.Source);
+         begin
+            if Position.Is_Set
+              and then not Node_By_Position.Contains (Position)
+            then
+               Node_By_Position.Insert (Position, Symbol);
+            end if;
+         end;
+      end loop;
+
+      for Edge of Self.Pending_Edges loop
+         declare
+            Target : constant VSS.Strings.Virtual_String :=
+              Resolved_Target (Edge);
+         begin
+            Self.Register (Edge.Source);
+            Self.Register (Target);
+
+            if Target /= Edge.Target then
+               Self.Entry_Nodes.Include (Target);
+            end if;
+
+            if Self.Edges.Contains (Edge.Source) then
+               Self.Edges (Edge.Source).Include (Target);
+            else
+               Self.Edges.Insert (Edge.Source, [Target]);
+            end if;
+         end;
+      end loop;
+
       for Cursor in Self.Edges.Iterate loop
          declare
             Source : constant VSS.Strings.Virtual_String :=
@@ -217,8 +312,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    --------------
 
    procedure Register
-     (Self : in out Database; Symbol : VSS.Strings.Virtual_String)
-   is
+     (Self : in out Database; Symbol : VSS.Strings.Virtual_String) is
    begin
       if not Self.Ids.Contains (Symbol) then
          Self.Symbols.Append (Symbol);
@@ -235,13 +329,21 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       return VSS.Strings.Virtual_String
    is (Self.Symbol_Of (Node));
 
+   --------------
+   -- Is_Entry --
+   --------------
+
+   function Is_Entry
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.Entry_Nodes.Contains (Self.Symbol_Of (Node)));
+
    -------------------------
    -- Known_Indirect_Call --
    -------------------------
 
    function Known_Indirect_Call
-     (Self  : Database;
-      Trace : VSS.String_Vectors.Virtual_String_Vector)
+     (Self : Database; Trace : VSS.String_Vectors.Virtual_String_Vector)
       return VSS.Strings.Virtual_String
    is
       use type VSS.String_Vectors.Virtual_String_Vector;
@@ -272,8 +374,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
    function In_Progress
      (Trace : VSS.String_Vectors.Virtual_String_Vector;
-      Name  : VSS.Strings.Virtual_String) return Boolean
-   is
+      Name  : VSS.Strings.Virtual_String) return Boolean is
    begin
       for Item of Trace loop
          if Item = Name then
@@ -329,14 +430,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       end loop;
 
       for Edge of Unit.Edges loop
-         Self.Register (Edge.Source);
-         Self.Register (Edge.Target);
-
-         if Self.Edges.Contains (Edge.Source) then
-            Self.Edges (Edge.Source).Include (Edge.Target);
-         else
-            Self.Edges.Insert (Edge.Source, [Edge.Target]);
-         end if;
+         Self.Pending_Edges.Append (Edge);
       end loop;
    end Load;
 
@@ -362,7 +456,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
    function Position
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Optional_Position
+      return Munin.Optional_Position
    is
       Symbol : constant VSS.Strings.Virtual_String := Self.Symbol_Of (Node);
    begin
@@ -378,8 +472,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
    function Resolve
      (Self : in out Database;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Resolve_Result
+      Node : Munin.Call_Graph_Providers.Call_Graph_Node) return Resolve_Result
    is
    begin
       return
@@ -434,9 +527,9 @@ package body Munin.Call_Graph_Providers.CI_Databases is
                return Result;
             end if;
 
-            --  Null: no override was given; fall through to the
-            --  pre-resolved __indirect_call placeholder set up by
-            --  Complete.
+         --  Null: no override was given; fall through to the
+         --  pre-resolved __indirect_call placeholder set up by
+         --  Complete.
          end;
       end if;
 
@@ -471,8 +564,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    -----------
 
    function Tasks
-     (Self : Database)
-      return Munin.Call_Graph_Providers.Call_Graph_Node_Array
+     (Self : Database) return Munin.Call_Graph_Providers.Call_Graph_Node_Array
    is
       function Is_Task_Or_Main
         (Symbol : VSS.Strings.Virtual_String) return Boolean;
@@ -502,7 +594,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       end loop;
 
       return
-        Result : Munin.Call_Graph_Providers.Call_Graph_Node_Array (1 .. Count)
+         Result : Munin.Call_Graph_Providers.Call_Graph_Node_Array (1 .. Count)
       do
          declare
             Index : Positive := Result'First;
@@ -522,27 +614,47 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    -----------------
 
    function To_Position
-     (Text : VSS.Strings.Virtual_String)
-      return Munin.Call_Graph_Providers.Optional_Position
+     (Text : VSS.Strings.Virtual_String) return Munin.Optional_Position
    is
-      Parts : constant VSS.String_Vectors.Virtual_String_Vector :=
+      function Line_Or_Column
+        (Value : VSS.Strings.Virtual_String) return Natural;
+      --  Value's numeric value when it is one or more decimal digits and
+      --  not zero, or 0 otherwise -- `0` is never a real 1-based line or
+      --  column (GCC uses it for some compiler-generated edges with no
+      --  real source position), and this avoids Positive'Value raising
+      --  Constraint_Error on either that or genuinely malformed text.
+
+      function Line_Or_Column
+        (Value : VSS.Strings.Virtual_String) return Natural
+      is
+         Image : constant String :=
+           VSS.Strings.Conversions.To_UTF_8_String (Value);
+      begin
+         if Image'Length = 0
+           or else (for some C of Image => C not in '0' .. '9')
+         then
+            return 0;
+         end if;
+
+         return Natural'Value (Image);
+      end Line_Or_Column;
+
+      Parts  : constant VSS.String_Vectors.Virtual_String_Vector :=
         Text.Split (':');
+      Line   : constant Natural :=
+        (if Parts.Length = 3 then Line_Or_Column (Parts.Element (2)) else 0);
+      Column : constant Natural :=
+        (if Parts.Length = 3 then Line_Or_Column (Parts.Element (3)) else 0);
    begin
-      if Parts.Length /= 3 then
+      if Parts.Length /= 3 or else Line = 0 or else Column = 0 then
          return (Is_Set => False);
       end if;
 
       return
         (Is_Set => True,
          File   => Parts.Element (1),
-         Line   =>
-           Positive'Wide_Wide_Value
-             (VSS.Strings.Conversions.To_Wide_Wide_String
-                (Parts.Element (2))),
-         Column =>
-           Positive'Wide_Wide_Value
-             (VSS.Strings.Conversions.To_Wide_Wide_String
-                (Parts.Element (3))));
+         Line   => Line,
+         Column => Column);
    end To_Position;
 
 end Munin.Call_Graph_Providers.CI_Databases;

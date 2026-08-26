@@ -150,6 +150,7 @@ package body Munin.Call_Graph_Providers.CI_Extra_Data is
                      if Reader.Element_Kind = Start_Object then
                         Read_Top_Entries;
                         Reader.Read_Next;  --  End_Object
+
                      else
                         Error.Append ("Unexpected value for " & Key);
                         Reader.Skip_Current_Value;
@@ -163,6 +164,7 @@ package body Munin.Call_Graph_Providers.CI_Extra_Data is
             end loop;
 
             Reader.Read_Next;  --  End_Object
+
          end if;
       end if;
    end Read_JSON;

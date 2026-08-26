@@ -13,6 +13,7 @@ project-files = [
    "callgraph_hello_world/callgraph_hello_world.gpr",
    "callgraph_cycle/callgraph_cycle.gpr",
    "callgraph_dynamic/callgraph_dynamic.gpr",
+   "callgraph_entry/callgraph_entry.gpr",
 ]
 
 executables = []

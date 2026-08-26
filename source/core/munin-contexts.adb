@@ -7,6 +7,7 @@ with Ada.Characters.Handling;
 with Ada.Exceptions;
 
 with GNATCOLL.GMP.Integers;
+with Langkit_Support.Slocs;
 with Langkit_Support.Text;
 with Libadalang.Common;
 
@@ -22,13 +23,16 @@ package body Munin.Contexts is
    use type VSS.Strings.Virtual_String;
 
    use type Libadalang.Common.Ada_Node_Kind_Type;
-   use type Libadalang.Common.Visit_Status;
 
    type CI_Provider_Access is
      access all Munin.Call_Graph_Providers.CI.CI_Provider;
    --  A normally-allocatable access type used only to obtain the aliased
    --  CI_Provider that Self.Call_Graph (a zero-storage-size access type)
    --  is then converted to point at.
+
+   procedure Load_Files
+     (Self  : in out Context'Class;
+      Units : Libadalang.Analysis.Analysis_Unit_Array);
 
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type)
@@ -43,11 +47,26 @@ package body Munin.Contexts is
       return Munin.Priorities.Optional_Priority;
 
    procedure Append_Task_Unique
-     (Self : in out Context; Item : Munin.Tasks.Task_Unit);
+     (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit);
 
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type) return VSS.Strings.Virtual_String
    is (VSS.Strings.To_Virtual_String (Value));
+
+   function To_Source_Position
+     (Unit : Libadalang.Analysis.Analysis_Unit'Class;
+      Sloc : Langkit_Support.Slocs.Source_Location) return Optional_Position
+   is (To_Position
+         (File   =>
+            VSS.Strings.Conversions.To_Virtual_String (Unit.Get_Filename),
+          Line   => Positive (Sloc.Line),
+          Column => Positive (Sloc.Column)));
+
+   function To_Source_Position
+     (Unit : Libadalang.Analysis.Analysis_Unit'Class;
+      Sloc : Langkit_Support.Slocs.Source_Location_Range)
+      return Optional_Position
+   is (To_Source_Position (Unit, Langkit_Support.Slocs.Start_Sloc (Sloc)));
 
    procedure Append_Error
      (Errors : in out VSS.String_Vectors.Virtual_String_Vector; Value : String)
@@ -241,7 +260,7 @@ package body Munin.Contexts is
    end Priority_For;
 
    procedure Append_Task_Unique
-     (Self : in out Context; Item : Munin.Tasks.Task_Unit)
+     (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit)
    is
       Name : constant VSS.Strings.Virtual_String :=
         Munin.Tasks.Qualified_Name (Item);
@@ -273,93 +292,139 @@ package body Munin.Contexts is
       Self.Task_Items.Append (Item);
    end Append_Task_Unique;
 
-   procedure Load_Project
-     (Self         : in out Context;
-      Project_File : VSS.Strings.Virtual_String;
-      Errors       : out VSS.String_Vectors.Virtual_String_Vector)
+   procedure Load_Files
+     (Self  : in out Context'Class;
+      Units : Libadalang.Analysis.Analysis_Unit_Array)
    is
-      Path  : constant String :=
-        VSS.Strings.Conversions.To_UTF_8_String (Project_File);
-      Files : VSS.String_Vectors.Virtual_String_Vector;
-   begin
-      Errors.Clear;
-      Self.Loaded_Project := Project_File;
-      Self.Task_Items.Clear;
-      Self.Protected_Items.Clear;
-      Self.Call_Graph := null;
-      Self.Call_Graph_Error := VSS.Strings.Empty_Virtual_String;
+      function Call_Site_Position
+        (Ref : Libadalang.Analysis.Base_Id'Class) return Optional_Position;
+      --  Ref's own position, unless it is the selector of a dotted
+      --  name (the usual `Object.Entry_Name;` form), in which case the
+      --  position of the '.' that precedes it -- what GCC records as
+      --  the call site for the edge into its generic entry-call
+      --  dispatcher (confirmed empirically; see the design notes for
+      --  Munin.Call_Graph_Providers.CI_Databases.Complete).
 
-      Munin.Project_Loading.Load
-        (Project_File     => Project_File,
-         Tree             => Self.Project_Tree,
-         Analysis_Context => Self.Analysis_Context,
-         Sources          => Files,
-         Errors           => Errors);
+      function Call_Site_Position
+        (Ref : Libadalang.Analysis.Base_Id'Class) return Optional_Position
+      is
+         use type Libadalang.Common.Token_Reference;
+         use type Libadalang.Common.Token_Kind;
 
-      if not Errors.Is_Empty then
-         return;
-      end if;
+         Previous_Token : constant Libadalang.Common.Token_Reference :=
+           Libadalang.Common.Previous (Ref.Token_Start);
+      begin
+         if Previous_Token /= Libadalang.Common.No_Token
+           and then Libadalang.Common.Kind
+                      (Libadalang.Common.Data (Previous_Token))
+                    = Libadalang.Common.Ada_Dot
+         then
+            return
+              To_Source_Position
+                (Ref.Unit,
+                 Libadalang.Common.Sloc_Range
+                   (Libadalang.Common.Data (Previous_Token)));
+         end if;
 
-      Self.Sources := Files;
+         return To_Source_Position (Ref.Unit, Ref.Sloc_Range);
+      end Call_Site_Position;
 
-      --  Collect diagnostics from all files
-      for File_Name of Files loop
-         declare
-            File_Path : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String (File_Name);
-            Unit      : constant Libadalang.Analysis.Analysis_Unit :=
-              Self.Analysis_Context.Get_From_File (File_Path);
-         begin
-            if Unit.Has_Diagnostics then
-               for D of Unit.Diagnostics loop
-                  Append_Error (Errors, Unit.Format_GNU_Diagnostic (D));
-               end loop;
+      procedure Collect_Entries (Decl : Libadalang.Analysis.Basic_Decl'Class);
+      --  For every entry in Decl's (a protected declaration's) visible
+      --  part, resolve every call to it project-wide (via
+      --  Units/P_Find_All_Calls) and record each call site's own
+      --  position, mapped to the entry body's own position, into
+      --  Entry_Call_Targets.
+
+      procedure Process_Name (Name : Libadalang.Analysis.Defining_Name);
+
+      procedure Collect_Entries (Decl : Libadalang.Analysis.Basic_Decl'Class)
+      is
+         Decls : constant Libadalang.Analysis.Ada_Node_List :=
+           (case Decl.Kind is
+              when Libadalang.Common.Ada_Single_Protected_Decl =>
+                Decl
+                  .As_Single_Protected_Decl
+                  .F_Definition
+                  .F_Public_Part
+                  .F_Decls,
+              when Libadalang.Common.Ada_Protected_Type_Decl   =>
+                Decl.As_Protected_Type_Decl.F_Definition.F_Public_Part.F_Decls,
+              when others                                      =>
+                Libadalang.Analysis.No_Ada_Node_List);
+      begin
+         if Decls.Is_Null then
+            return;
+         end if;
+
+         for Item of Decls loop
+            if Item.Kind = Libadalang.Common.Ada_Entry_Decl then
+               declare
+                  Entry_Item : constant Libadalang.Analysis.Entry_Decl :=
+                    Item.As_Entry_Decl;
+                  Entry_Body : constant Libadalang.Analysis.Body_Node :=
+                    Entry_Item.P_Body_Part;
+               begin
+                  if not Entry_Body.Is_Null then
+                     declare
+                        Target_Position : constant Optional_Position :=
+                          To_Source_Position
+                            (Entry_Body.Unit, Entry_Body.Sloc_Range);
+
+                        Refs : constant Libadalang.Analysis.Ref_Result_Array :=
+                          Entry_Item.F_Spec.F_Entry_Name.P_Find_All_Calls
+                            (Units => Units);
+                     begin
+                        for Ref of Refs loop
+                           Self.Entry_Calls.Include
+                             (Call_Site_Position
+                                (Libadalang.Analysis.Ref (Ref)),
+                              Target_Position);
+                        end loop;
+                     end;
+                  end if;
+               end;
             end if;
-         end;
-      end loop;
+         end loop;
+      exception
+         when Libadalang.Common.Property_Error =>
+            null;
+      end Collect_Entries;
 
-      --  Process library-level names, including those in
-      --  generic instantiations
-      declare
-         procedure Process_Name (Name : Libadalang.Analysis.Defining_Name);
+      procedure Process_Name (Name : Libadalang.Analysis.Defining_Name) is
+         Node : constant Libadalang.Analysis.Ada_Node := Name.Parent;
+      begin
+         case Node.Kind is
+            --  Single task/protected declarations always denote one
+            --  concrete object; a bare task/protected type declaration
+            --  (with no object) never is, so it is never reported here.
 
-         procedure Process_Name (Name : Libadalang.Analysis.Defining_Name) is
-         begin
-            declare
-               Node : constant Libadalang.Analysis.Ada_Node := Name.Parent;
-               Kind : constant Libadalang.Common.Ada_Node_Kind_Type :=
-                 Node.Kind;
-            begin
-               --  Single task/protected declarations always denote one
-               --  concrete object; a bare task/protected type declaration
-               --  (with no object) never is, so it is never reported here.
-               if Kind
-                  in Libadalang.Common.Ada_Single_Task_Decl
-                   | Libadalang.Common.Ada_Single_Task_Type_Decl
-               then
-                  Append_Task_Unique
-                    (Self,
-                     Munin.Tasks.Create
-                       (Qualified_Name =>
-                          To_Virtual_String
-                            (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                        Priority       => Priority_For (Node.As_Basic_Decl)));
+            when Libadalang.Common.Ada_Single_Task_Decl
+               | Libadalang.Common.Ada_Single_Task_Type_Decl =>
+               Append_Task_Unique
+                 (Self,
+                  Munin.Tasks.Create
+                    (Qualified_Name =>
+                       To_Virtual_String
+                         (Node.As_Basic_Decl.P_Fully_Qualified_Name),
+                     Priority       => Priority_For (Node.As_Basic_Decl)));
 
-               elsif Kind = Libadalang.Common.Ada_Single_Protected_Decl then
-                  Self.Protected_Items.Append
-                    (Munin.Protected_Objects.Create
-                       (Qualified_Name =>
-                          To_Virtual_String
-                            (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                        Priority       => Priority_For (Node.As_Basic_Decl)));
+            when Libadalang.Common.Ada_Single_Protected_Decl =>
+               Self.Protected_Items.Append
+                 (Munin.Protected_Objects.Create
+                    (Qualified_Name =>
+                       To_Virtual_String
+                         (Node.As_Basic_Decl.P_Fully_Qualified_Name),
+                     Priority       => Priority_For (Node.As_Basic_Decl)));
+               Collect_Entries (Node.As_Basic_Decl);
 
-               --  A library-level object declaration of a named task/
-               --  protected type (e.g. `Object : Protected_Type;`) is a
-               --  concrete object too; classify it by the designated type's
-               --  kind, but never report the type declaration itself.
-               elsif Kind = Libadalang.Common.Ada_Defining_Name_List
-                 and then Node.Parent.Kind = Libadalang.Common.Ada_Object_Decl
-               then
+            --  A library-level object declaration of a named task/
+            --  protected type (e.g. `Object : Protected_Type;`) is a
+            --  concrete object too; classify it by the designated type's
+            --  kind, but never report the type declaration itself.
+
+            when Libadalang.Common.Ada_Defining_Name_List    =>
+               if Node.Parent.Kind = Libadalang.Common.Ada_Object_Decl then
                   declare
                      Object_Decl : constant Libadalang.Analysis.Basic_Decl :=
                        Node.Parent.As_Basic_Decl;
@@ -410,6 +475,7 @@ package body Munin.Contexts is
                                 To_Virtual_String
                                   (Name.P_Fully_Qualified_Name),
                               Priority       => Priority_For (Object_Decl)));
+                        Collect_Entries (Full_Type_Decl.As_Basic_Decl);
 
                      elsif Type_Kind = Libadalang.Common.Ada_Task_Type_Decl
                      then
@@ -423,16 +489,80 @@ package body Munin.Contexts is
                      end if;
                   end;
                end if;
-            end;
-         exception
-            when Libadalang.Common.Property_Error =>
+
+            when others                                      =>
                null;
-         end Process_Name;
+         end case;
+      exception
+         when Libadalang.Common.Property_Error =>
+            null;
+      end Process_Name;
+
+   begin
+      --  Process library-level names, including those in
+      --  generic instantiations
+
+      Munin.Contexts.Traverses.Each_Library_Level_Name
+        (Self, Process_Name'Access);
+
+      Munin.Contexts.Traverses.Each_Effectively_Global_Name
+        (Self, Process_Name'Access);
+   end Load_Files;
+
+   procedure Load_Project
+     (Self         : in out Context;
+      Project_File : VSS.Strings.Virtual_String;
+      Errors       : out VSS.String_Vectors.Virtual_String_Vector)
+   is
+      Path  : constant String :=
+        VSS.Strings.Conversions.To_UTF_8_String (Project_File);
+      Files : VSS.String_Vectors.Virtual_String_Vector;
+   begin
+      Errors.Clear;
+      Self.Loaded_Project := Project_File;
+      Self.Task_Items.Clear;
+      Self.Protected_Items.Clear;
+      Self.Call_Graph := null;
+      Self.Call_Graph_Error := VSS.Strings.Empty_Virtual_String;
+
+      Munin.Project_Loading.Load
+        (Project_File     => Project_File,
+         Tree             => Self.Project_Tree,
+         Analysis_Context => Self.Analysis_Context,
+         Sources          => Files,
+         Errors           => Errors);
+
+      if not Errors.Is_Empty then
+         return;
+      end if;
+
+      Self.Sources := Files;
+
+      --  Collect diagnostics from all files, and keep every unit around
+      --  (Units) for Entry_Call_Targets' project-wide P_Find_All_Calls
+      --  query below.
+      declare
+         Units : Libadalang.Analysis.Analysis_Unit_Array (1 .. Files.Length);
       begin
-         Munin.Contexts.Traverses.Each_Library_Level_Name
-           (Self, Process_Name'Access);
-         Munin.Contexts.Traverses.Each_Effectively_Global_Name
-           (Self, Process_Name'Access);
+         for Index in Units'Range loop
+            declare
+               File_Path : constant String :=
+                 VSS.Strings.Conversions.To_UTF_8_String
+                   (Files.Element (Index));
+               Unit      : constant Libadalang.Analysis.Analysis_Unit :=
+                 Self.Analysis_Context.Get_From_File (File_Path);
+            begin
+               Units (Index) := Unit;
+
+               if Unit.Has_Diagnostics then
+                  for D of Unit.Diagnostics loop
+                     Append_Error (Errors, Unit.Format_GNU_Diagnostic (D));
+                  end loop;
+               end if;
+            end;
+         end loop;
+
+         Self.Load_Files (Units);
       end;
 
       declare
@@ -440,7 +570,10 @@ package body Munin.Contexts is
            new Munin.Call_Graph_Providers.CI.CI_Provider;
       begin
          Munin.Call_Graph_Providers.CI.Initialize
-           (Provider.all, Self.Project_Tree, Self.Call_Graph_Error);
+           (Provider.all,
+            Self.Project_Tree,
+            Self.Entry_Calls,
+            Self.Call_Graph_Error);
 
          if Self.Call_Graph_Error.Is_Empty then
             Self.Call_Graph :=

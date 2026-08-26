@@ -12,6 +12,7 @@ with VSS.String_Vectors;
 with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
+with Munin.Entry_Calls;
 with Munin.Protected_Objects;
 with Munin.Tasks;
 
@@ -63,6 +64,7 @@ private
       Sources          : VSS.String_Vectors.Virtual_String_Vector;
       Task_Items       : Task_Unit_Vectors.Vector;
       Protected_Items  : Protected_Object_Vectors.Vector;
+      Entry_Calls      : Munin.Entry_Calls.Entry_Call_Register;
       Call_Graph       : Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
       Call_Graph_Error : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;

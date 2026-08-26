@@ -8,6 +8,7 @@ with Ada.Containers.Hashed_Maps;
 with Ada.Containers.Hashed_Sets;
 with Ada.Containers.Vectors;
 
+with Munin.Entry_Calls;
 with VSS.String_Vectors;
 with VSS.Strings.Hash;
 with VSS.Text_Streams;
@@ -32,9 +33,33 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  once, in more than one loaded `.ci` file); Error is set only when
    --  Stream could not be parsed as a `.ci` file at all.
 
-   procedure Complete (Self : in out Database);
-   --  Build the reverse-edge index needed by Callers. Call once after all
-   --  `.ci` files (and any extra data) have been loaded into Self.
+   procedure Complete
+     (Self        : in out Database;
+      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register);
+   --  Fold every edge parsed by Load into Self's queryable Callees/Callers
+   --  graph (deferred until now, rather than done per-file by Load, so
+   --  that two distinct entry calls from the same caller -- otherwise
+   --  indistinguishable once folded, see below -- can still be told apart
+   --  by their call-site position), then build the reverse-edge index
+   --  needed by Callers. Call once after all `.ci` files (and any extra
+   --  data) have been loaded into Self.
+   --
+   --  An edge that targets GNAT's generic protected-entry-call runtime
+   --  dispatcher -- the same shared node for every entry call in a
+   --  program, since the actual entry reached is a runtime-only decision
+   --  invisible to the static call graph -- has its target resolved via
+   --  Entry_Call_Targets instead: the call-site position captured for the
+   --  edge is looked up in Entry_Call_Targets to find the real target
+   --  entry body's own position, which is then matched against an
+   --  internal node already present in Self (from the same `.ci` file) at
+   --  that position. An edge whose call-site position isn't in
+   --  Entry_Call_Targets, or whose resolved position matches no known
+   --  node, is left pointing at the generic dispatcher.
+
+   function Is_Entry
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+   --  True for exactly the nodes Complete resolved an entry-call edge to.
 
    function Callees
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
@@ -54,7 +79,7 @@ package Munin.Call_Graph_Providers.CI_Databases is
 
    function Position
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Optional_Position;
+      return Munin.Optional_Position;
 
    function Image
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
@@ -62,8 +87,7 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  Node's symbol, always defined.
 
    function Tasks
-     (Self : Database)
-      return Munin.Call_Graph_Providers.Call_Graph_Node_Array;
+     (Self : Database) return Munin.Call_Graph_Providers.Call_Graph_Node_Array;
    --  Nodes whose symbol matches GNAT's mangling for a task body (a
    --  `TKB`-suffixed segment), or is exactly `main` -- the environment
    --  task, exported under that fixed C link name by gnatbind's
@@ -98,8 +122,7 @@ package Munin.Call_Graph_Providers.CI_Databases is
 
    function Resolve
      (Self : in out Database;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Resolve_Result;
+      Node : Munin.Call_Graph_Providers.Call_Graph_Node) return Resolve_Result;
    --  Worst-case stack usage rooted at Node: its own static stack plus the
    --  maximum over all of its (recursively resolved) callees. Cycle is
    --  set when Node's call graph is (or reaches) a recursive cycle, in
@@ -188,6 +211,14 @@ private
       --  usage information, external ones carry whatever name/position
       --  the `.ci` label recorded (possibly none, e.g. `<built-in>`).
 
+      Pending_Edges :
+        Munin.Call_Graph_Providers.CI_Compilation_Units.Call_Vectors.Vector;
+      --  Every edge parsed by Load, not yet folded into Edges/
+      --  Reverse_Edges; folded (and cleared implicitly by not being
+      --  consulted again) by Complete, which needs each edge's own
+      --  call-site position (Call.Label) still distinguishable per call
+      --  site -- lost once folded into Edges' per-caller callee Set.
+
       Edges : Edge_Maps.Map;
       --  Forward call edges: {caller symbol -> {callee symbols}}
 
@@ -206,6 +237,9 @@ private
 
       Symbols : Symbol_Vectors.Vector;
       Ids     : Symbol_Ids.Map;
+
+      Entry_Nodes : String_Sets.Set;
+      --  Symbols Complete resolved an entry-call edge to; see Is_Entry.
    end record;
 
 end Munin.Call_Graph_Providers.CI_Databases;
