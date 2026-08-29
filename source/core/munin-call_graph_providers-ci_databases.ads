@@ -9,6 +9,7 @@ with Ada.Containers.Hashed_Sets;
 with Ada.Containers.Vectors;
 
 with Munin.Entry_Calls;
+with Munin.Protected_Operations;
 with VSS.String_Vectors;
 with VSS.Strings.Hash;
 with VSS.Text_Streams;
@@ -34,8 +35,9 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  Stream could not be parsed as a `.ci` file at all.
 
    procedure Complete
-     (Self        : in out Database;
-      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register);
+     (Self                 : in out Database;
+      Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations : Munin.Protected_Operations.Registry);
    --  Fold every edge parsed by Load into Self's queryable Callees/Callers
    --  graph (deferred until now, rather than done per-file by Load, so
    --  that two distinct entry calls from the same caller -- otherwise
@@ -55,11 +57,30 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  that position. An edge whose call-site position isn't in
    --  Entry_Call_Targets, or whose resolved position matches no known
    --  node, is left pointing at the generic dispatcher.
+   --
+   --  Once that resolution is done, an edge whose call-site position
+   --  Protected_Operations attributes to a specific protected object is
+   --  redirected once more, to a node synthesized for that (object,
+   --  target) pair -- see Is_Protected_Operation/Protected_Object_Name.
+   --  That synthesized node's own (and only) callee is the original
+   --  target, so Callees needs no special-casing for it at all.
 
    function Is_Entry
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
       return Boolean;
    --  True for exactly the nodes Complete resolved an entry-call edge to.
+
+   function Is_Protected_Operation
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+   --  True for exactly the nodes Complete synthesized by attributing a
+   --  call site to a specific protected object.
+
+   function Protected_Object_Name
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return VSS.Strings.Virtual_String;
+   --  The qualified name Node was synthesized for, or an empty string when
+   --  Is_Protected_Operation (Self, Node) is False.
 
    function Callees
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
@@ -163,6 +184,14 @@ private
         Equivalent_Keys => VSS.Strings."=",
         "="             => String_Sets."=");
 
+   package Owner_Name_Maps is new
+     Ada.Containers.Hashed_Maps
+       (Key_Type        => VSS.Strings.Virtual_String,
+        Element_Type    => VSS.Strings.Virtual_String,
+        Hash            => VSS.Strings.Hash,
+        Equivalent_Keys => VSS.Strings."=",
+        "="             => VSS.Strings."=");
+
    type Top_Entry is record
       Symbol : VSS.Strings.Virtual_String;
       Size   : Natural;
@@ -240,6 +269,16 @@ private
 
       Entry_Nodes : String_Sets.Set;
       --  Symbols Complete resolved an entry-call edge to; see Is_Entry.
+
+      Protected_Operation_Nodes : String_Sets.Set;
+      --  Symbols Complete synthesized by attributing a call site to a
+      --  specific protected object -- always a synthesized node, never a
+      --  raw `.ci` symbol; see Is_Protected_Operation.
+
+      Owner_Names : Owner_Name_Maps.Map;
+      --  Protected_Operation_Nodes member -> the qualified name of the
+      --  protected object it was synthesized for; see
+      --  Protected_Object_Name.
    end record;
 
 end Munin.Call_Graph_Providers.CI_Databases;

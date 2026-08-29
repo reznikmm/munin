@@ -41,15 +41,17 @@ package body Test_Call_Graph_Entry is
       --  the entry-call target map that resolves Guard.Wait happens
       --  there, in Munin.Contexts.Load_Project.
       declare
-         Context : Munin.Contexts.Context;
-         Errors  : VSS.String_Vectors.Virtual_String_Vector;
+         Context  : Munin.Contexts.Context;
+         Errors   : VSS.String_Vectors.Virtual_String_Vector;
+         Warnings : VSS.String_Vectors.Virtual_String_Vector;
       begin
          Munin.Contexts.Load_Project
            (Self         => Context,
             Project_File =>
               VSS.Strings.Conversions.To_Virtual_String
                 (Crate_Dir & "/callgraph_entry.gpr"),
-            Errors       => Errors);
+            Errors       => Errors,
+            Warnings     => Warnings);
 
          if not Errors.Is_Empty then
             declare
@@ -110,11 +112,64 @@ package body Test_Call_Graph_Entry is
                          & "__protected_entry_call"));
 
                --  Regression guard: the ordinary protected procedure call
-               --  (Guard.Signal) is still attributed normally.
-               Op.Assert
-                 (Test_Call_Graph_Support.Has_Callee
-                    (Provider.all, Worker, "guard_pkg__guard__signalP"));
+               --  (Guard.Signal) is still attributed, but now via a node
+               --  synthesized to attribute it to Guard specifically --
+               --  every resolvable protected-operation call is split this
+               --  way, single-owner objects included, so the raw
+               --  "signalP" symbol is no longer a direct callee of
+               --  Worker.
                Op.Assert (not Provider.Is_Entry (Worker));
+               Op.Assert
+                 (not Test_Call_Graph_Support.Has_Callee
+                        (Provider.all, Worker, "guard_pkg__guard__signalP"));
+
+               declare
+                  Signal_Call :
+                    constant Munin.Call_Graph_Providers.Call_Graph_Node :=
+                      Test_Call_Graph_Support.Node_Of
+                        (Provider.all,
+                         "Guard_Pkg.Guard/guard_pkg__guard__signalP");
+               begin
+                  Op.Assert
+                    (Test_Call_Graph_Support.Has_Callee
+                       (Provider.all, Worker,
+                        "Guard_Pkg.Guard/guard_pkg__guard__signalP"));
+                  Op.Assert (Provider.Is_Protected_Operation (Signal_Call));
+                  Op.Assert
+                    (Provider.Protected_Object_Name (Signal_Call)
+                     = "Guard_Pkg.Guard");
+                  Op.Assert
+                    (Test_Call_Graph_Support.Has_Callee
+                       (Provider.all, Signal_Call,
+                        "guard_pkg__guard__signalP"));
+               end;
+
+               --  The entry call is split the same uniform way: Worker's
+               --  actual callee is a node attributing Guard.Wait to
+               --  Guard, whose own single callee is the real entry body
+               --  Entry_Body already identified above.
+               declare
+                  Wait_Call :
+                    constant Munin.Call_Graph_Providers.Call_Graph_Node :=
+                      Test_Call_Graph_Support.Node_Of
+                        (Provider.all,
+                         "Guard_Pkg.Guard/guard_pkg__guard__wait_E3s");
+               begin
+                  Op.Assert
+                    (Test_Call_Graph_Support.Has_Callee
+                       (Provider.all, Worker,
+                        "Guard_Pkg.Guard/guard_pkg__guard__wait_E3s"));
+                  Op.Assert (Provider.Is_Protected_Operation (Wait_Call));
+                  Op.Assert
+                    (Provider.Protected_Object_Name (Wait_Call)
+                     = "Guard_Pkg.Guard");
+                  Op.Assert
+                    (Test_Call_Graph_Support.Has_Callee
+                       (Provider.all, Wait_Call,
+                        "guard_pkg__guard__wait_E3s"));
+                  Op.Assert
+                    (not Provider.Is_Protected_Operation (Entry_Body));
+               end;
             end;
          end;
       end;

@@ -3,6 +3,7 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
+with Ada.Containers.Ordered_Maps;
 with Ada.Containers.Vectors;
 
 with GPR2.Project.Tree;
@@ -15,6 +16,7 @@ with Munin.Call_Graph_Providers;
 with Munin.Entry_Calls;
 with Munin.Priorities;
 with Munin.Protected_Objects;
+with Munin.Protected_Operations;
 with Munin.Tasks;
 
 package Munin.Contexts is
@@ -24,7 +26,16 @@ package Munin.Contexts is
    procedure Load_Project
      (Self         : in out Context;
       Project_File : VSS.Strings.Virtual_String;
-      Errors       : out VSS.String_Vectors.Virtual_String_Vector);
+      Errors       : out VSS.String_Vectors.Virtual_String_Vector;
+      Warnings     : out VSS.String_Vectors.Virtual_String_Vector);
+   --  Errors reports issues serious enough that the project couldn't be
+   --  fully understood (a project file failed to load or parse, or a
+   --  compile unit has GNU diagnostics); a caller should treat a non-empty
+   --  Errors as fatal to further analysis. Warnings reports narrower,
+   --  non-fatal notices -- currently just "cannot determine which
+   --  protected object is called here" for one specific call site -- that
+   --  don't prevent everything else Self reports from still being
+   --  meaningful.
 
    function Tasks (Self : Context) return Munin.Tasks.Task_Unit_Array;
 
@@ -60,24 +71,32 @@ private
        (Index_Type   => Positive,
         Element_Type => Munin.Tasks.Task_Unit);
 
-   package Protected_Object_Vectors is new
-     Ada.Containers.Vectors
-       (Index_Type   => Positive,
-        Element_Type => Munin.Protected_Objects.Protected_Object);
+   package Protected_Object_Maps is new
+     Ada.Containers.Ordered_Maps
+       (Key_Type     => VSS.Strings.Virtual_String,
+        Element_Type => Munin.Protected_Objects.Protected_Object,
+        "<"          => VSS.Strings."<");
+   --  Keyed by qualified name, rather than a plain Vector: lets Priority
+   --  look a single object up in O(log n) instead of scanning every
+   --  object known to Self. Ordered (not hashed) so Protected_Objects
+   --  (rebuilt by iterating the map) stays deterministic -- alphabetical
+   --  by qualified name.
 
    type Context is tagged limited record
-      Loaded_Project   : VSS.Strings.Virtual_String :=
+      Loaded_Project       : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Project_Tree     : GPR2.Project.Tree.Object;
-      Analysis_Context : Libadalang.Analysis.Analysis_Context;
-      Sources          : VSS.String_Vectors.Virtual_String_Vector;
-      Task_Items       : Task_Unit_Vectors.Vector;
-      Protected_Items  : Protected_Object_Vectors.Vector;
-      Entry_Calls      : Munin.Entry_Calls.Entry_Call_Register;
-      Call_Graph       : Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
-      Call_Graph_Error : VSS.Strings.Virtual_String :=
+      Project_Tree         : GPR2.Project.Tree.Object;
+      Analysis_Context     : Libadalang.Analysis.Analysis_Context;
+      Sources              : VSS.String_Vectors.Virtual_String_Vector;
+      Task_Items           : Task_Unit_Vectors.Vector;
+      Protected_Items      : Protected_Object_Maps.Map;
+      Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations : Munin.Protected_Operations.Registry;
+      Call_Graph           :
+        Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
+      Call_Graph_Error     : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Default_Ceiling  : Munin.Priorities.Priority_Value := 0;
+      Default_Ceiling      : Munin.Priorities.Priority_Value := 0;
    end record;
 
    function Call_Graph

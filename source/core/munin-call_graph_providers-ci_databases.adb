@@ -62,6 +62,17 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       return VSS.Strings.Virtual_String
    is (Self.Symbols (Positive (Node)));
 
+   function Base_Symbol_Of
+     (Self : Database; Symbol : VSS.Strings.Virtual_String)
+      return VSS.Strings.Virtual_String
+   is (if Self.Protected_Operation_Nodes.Contains (Symbol)
+         and then Self.Edges.Contains (Symbol)
+       then String_Sets.Element (Self.Edges (Symbol).First)
+       else Symbol);
+   --  Symbol, unless it is a node Complete synthesized to attribute a call
+   --  site to a specific protected object, in which case its one real
+   --  outgoing edge -- the original target -- is returned instead.
+
    function Known_Indirect_Call
      (Self : Database; Trace : VSS.String_Vectors.Virtual_String_Vector)
       return VSS.Strings.Virtual_String;
@@ -181,8 +192,9 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    --------------
 
    procedure Complete
-     (Self        : in out Database;
-      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register)
+     (Self                 : in out Database;
+      Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations : Munin.Protected_Operations.Registry)
    is
       package Position_To_Symbol_Maps is new
         Ada.Containers.Hashed_Maps
@@ -237,6 +249,52 @@ package body Munin.Call_Graph_Providers.CI_Databases is
                else Edge.Target);
          end;
       end Resolved_Target;
+
+      function Split_Target
+        (Edge        : Munin.Call_Graph_Providers.CI_Compilation_Units.Call;
+         Base_Target : VSS.Strings.Virtual_String)
+         return VSS.Strings.Virtual_String;
+      --  Base_Target, unless Edge's call-site position is attributed by
+      --  Protected_Operations to a specific protected object, in which
+      --  case a node synthesized for that (object, Base_Target) pair is
+      --  registered (once) and returned instead.
+
+      function Split_Target
+        (Edge        : Munin.Call_Graph_Providers.CI_Compilation_Units.Call;
+         Base_Target : VSS.Strings.Virtual_String)
+         return VSS.Strings.Virtual_String
+      is
+         Call_Site : constant Munin.Optional_Position :=
+           To_Position (Edge.Label);
+
+         Owner : constant VSS.Strings.Virtual_String :=
+           (if Call_Site.Is_Set
+            then Protected_Operations.Protected_Object (Call_Site)
+            else VSS.Strings.Empty_Virtual_String);
+      begin
+         if Owner.Is_Empty then
+            return Base_Target;
+         end if;
+
+         declare
+            Split_Symbol : constant VSS.Strings.Virtual_String :=
+              Owner & "/" & Base_Target;
+         begin
+            if not Self.Edges.Contains (Split_Symbol) then
+               --  Mint the node and give it exactly one real outgoing
+               --  edge: the original target this call site actually
+               --  reaches. Callees (Split_Symbol) then needs no
+               --  special-casing at all -- it's an ordinary lookup, same
+               --  as any other node.
+               Self.Register (Base_Target);
+               Self.Edges.Insert (Split_Symbol, [Base_Target]);
+               Self.Protected_Operation_Nodes.Include (Split_Symbol);
+               Self.Owner_Names.Insert (Split_Symbol, Owner);
+            end if;
+
+            return Split_Symbol;
+         end;
+      end Split_Target;
    begin
       for Cursor in Self.Sources.Iterate loop
          declare
@@ -255,14 +313,16 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
       for Edge of Self.Pending_Edges loop
          declare
-            Target : constant VSS.Strings.Virtual_String :=
+            Base_Target : constant VSS.Strings.Virtual_String :=
               Resolved_Target (Edge);
+            Target      : constant VSS.Strings.Virtual_String :=
+              Split_Target (Edge, Base_Target);
          begin
             Self.Register (Edge.Source);
             Self.Register (Target);
 
-            if Target /= Edge.Target then
-               Self.Entry_Nodes.Include (Target);
+            if Base_Target /= Edge.Target then
+               Self.Entry_Nodes.Include (Base_Target);
             end if;
 
             if Self.Edges.Contains (Edge.Source) then
@@ -444,11 +504,54 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    is
       Symbol : constant VSS.Strings.Virtual_String := Self.Symbol_Of (Node);
    begin
+      if Self.Protected_Operation_Nodes.Contains (Symbol) then
+         declare
+            Base       : constant VSS.Strings.Virtual_String :=
+              Self.Base_Symbol_Of (Symbol);
+            Plain_Name : constant VSS.Strings.Virtual_String :=
+              (if Self.Sources.Contains (Base)
+               then Self.Sources (Base).Node.Name
+               else VSS.Strings.Empty_Virtual_String);
+            Owner      : constant VSS.Strings.Virtual_String :=
+              Self.Owner_Names (Symbol);
+         begin
+            return
+              (if Plain_Name.Is_Empty
+               then Owner
+               else Owner & "." & Plain_Name);
+         end;
+      end if;
+
       return
         (if Self.Sources.Contains (Symbol)
          then Self.Sources (Symbol).Node.Name
          else VSS.Strings.Empty_Virtual_String);
    end Qualified_Name;
+
+   ----------------------------
+   -- Is_Protected_Operation --
+   ----------------------------
+
+   function Is_Protected_Operation
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.Protected_Operation_Nodes.Contains (Self.Symbol_Of (Node)));
+
+   ---------------------------
+   -- Protected_Object_Name --
+   ---------------------------
+
+   function Protected_Object_Name
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return VSS.Strings.Virtual_String
+   is
+      Symbol : constant VSS.Strings.Virtual_String := Self.Symbol_Of (Node);
+   begin
+      return
+        (if Self.Owner_Names.Contains (Symbol)
+         then Self.Owner_Names (Symbol)
+         else VSS.Strings.Empty_Virtual_String);
+   end Protected_Object_Name;
 
    --------------
    -- Position --
@@ -459,10 +562,12 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       return Munin.Optional_Position
    is
       Symbol : constant VSS.Strings.Virtual_String := Self.Symbol_Of (Node);
+      Lookup : constant VSS.Strings.Virtual_String :=
+        Self.Base_Symbol_Of (Symbol);
    begin
       return
-        (if Self.Sources.Contains (Symbol)
-         then To_Position (Self.Sources (Symbol).Node.Source)
+        (if Self.Sources.Contains (Lookup)
+         then To_Position (Self.Sources (Lookup).Node.Source)
          else (Is_Set => False));
    end Position;
 

@@ -132,8 +132,9 @@ package body Test_Priority is
       --  Testing: load the project.
       --  Validate discovered concurrency objects.
       declare
-         Context : Munin.Contexts.Context;
-         Errors  : VSS.String_Vectors.Virtual_String_Vector;
+         Context  : Munin.Contexts.Context;
+         Errors   : VSS.String_Vectors.Virtual_String_Vector;
+         Warnings : VSS.String_Vectors.Virtual_String_Vector;
 
          Found_Task      : Boolean := False;
          Found_Protected : Boolean := False;
@@ -159,7 +160,8 @@ package body Test_Priority is
            (Self         => Context,
             Project_File => VSS.Strings.Conversions.To_Virtual_String
               (Crate_Dir & "/priority.gpr"),
-            Errors       => Errors);
+            Errors       => Errors,
+            Warnings     => Warnings);
 
          if not Errors.Is_Empty then
             declare

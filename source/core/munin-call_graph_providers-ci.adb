@@ -144,15 +144,36 @@ package body Munin.Call_Graph_Providers.CI is
       return Boolean
    is (Self.DB.Is_Entry (Node));
 
+   ----------------------------
+   -- Is_Protected_Operation --
+   ----------------------------
+
+   overriding
+   function Is_Protected_Operation
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.DB.Is_Protected_Operation (Node));
+
+   ---------------------------
+   -- Protected_Object_Name --
+   ---------------------------
+
+   overriding
+   function Protected_Object_Name
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return VSS.Strings.Virtual_String
+   is (Self.DB.Protected_Object_Name (Node));
+
    ----------------
    -- Initialize --
    ----------------
 
    procedure Initialize
-     (Self        : in out CI_Provider;
-      Tree        : GPR2.Project.Tree.Object;
-      Entry_Calls : Munin.Entry_Calls.Entry_Call_Register;
-      Error       : out VSS.Strings.Virtual_String)
+     (Self                 : in out CI_Provider;
+      Tree                 : GPR2.Project.Tree.Object;
+      Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations : Munin.Protected_Operations.Registry;
+      Error                : out VSS.Strings.Virtual_String)
    is
       Files      : constant VSS.String_Vectors.Virtual_String_Vector :=
         Find_CI_Files (Tree);
@@ -214,7 +235,7 @@ package body Munin.Call_Graph_Providers.CI is
          return;
       end if;
 
-      Self.DB.Complete (Entry_Calls);
+      Self.DB.Complete (Entry_Calls, Protected_Operations);
    end Initialize;
 
    ---------------------

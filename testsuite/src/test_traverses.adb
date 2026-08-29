@@ -127,7 +127,8 @@ package body Test_Traverses is
       --  Testing: load the project, then exercise the traversal directly.
       declare
          Context : Munin.Contexts.Context;
-         Errors  : VSS.String_Vectors.Virtual_String_Vector;
+         Errors   : VSS.String_Vectors.Virtual_String_Vector;
+         Warnings : VSS.String_Vectors.Virtual_String_Vector;
          Names   : VSS.String_Vectors.Virtual_String_Vector;
 
          function Any_Contains (Pattern : String) return Boolean is
@@ -158,7 +159,8 @@ package body Test_Traverses is
             Project_File =>
               VSS.Strings.Conversions.To_Virtual_String
                 (Crate_Dir & "/priority.gpr"),
-            Errors       => Errors);
+            Errors       => Errors,
+            Warnings     => Warnings);
 
          if not Errors.Is_Empty then
             declare
@@ -309,7 +311,8 @@ package body Test_Traverses is
       --  Testing: load the project, then exercise the traversal directly.
       declare
          Context : Munin.Contexts.Context;
-         Errors  : VSS.String_Vectors.Virtual_String_Vector;
+         Errors   : VSS.String_Vectors.Virtual_String_Vector;
+         Warnings : VSS.String_Vectors.Virtual_String_Vector;
          Names   : VSS.String_Vectors.Virtual_String_Vector;
 
          function Any_Contains (Pattern : String) return Boolean is
@@ -340,7 +343,8 @@ package body Test_Traverses is
             Project_File =>
               VSS.Strings.Conversions.To_Virtual_String
                 (Crate_Dir & "/priority.gpr"),
-            Errors       => Errors);
+            Errors       => Errors,
+            Warnings     => Warnings);
 
          if not Errors.Is_Empty then
             declare

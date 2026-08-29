@@ -14,6 +14,7 @@ project-files = [
    "callgraph_cycle/callgraph_cycle.gpr",
    "callgraph_dynamic/callgraph_dynamic.gpr",
    "callgraph_entry/callgraph_entry.gpr",
+   "protected_operations/protected_operations.gpr",
 ]
 
 executables = []

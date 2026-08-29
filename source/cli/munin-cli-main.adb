@@ -325,17 +325,24 @@ begin
    Ada.Text_IO.New_Line;
 
    declare
-      Context : Munin.Contexts.Context;
-      Errors  : VSS.String_Vectors.Virtual_String_Vector;
+      Context  : Munin.Contexts.Context;
+      Errors   : VSS.String_Vectors.Virtual_String_Vector;
+      Warnings : VSS.String_Vectors.Virtual_String_Vector;
    begin
       Munin.Contexts.Load_Project
         (Self         => Context,
          Project_File => Command.Project_File,
-         Errors       => Errors);
+         Errors       => Errors,
+         Warnings     => Warnings);
 
       if not Errors.Is_Empty then
          VSS.Command_Line.Report_Error (Errors);
       end if;
+
+      for Item of Warnings loop
+         Ada.Text_IO.Put_Line
+           ("warning: " & VSS.Strings.Conversions.To_UTF_8_String (Item));
+      end loop;
 
       case Command.Subject is
          when Munin.CLI.Command_Line.Show_Priorities =>

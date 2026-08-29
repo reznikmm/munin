@@ -7,6 +7,8 @@ with Ada.Characters.Handling;
 with Ada.Exceptions;
 
 with GNATCOLL.GMP.Integers;
+with GPR2;
+with GPR2.Build.Source.Sets;
 with Langkit_Support.Slocs;
 with Langkit_Support.Text;
 with Libadalang.Common;
@@ -30,8 +32,9 @@ package body Munin.Contexts is
    --  is then converted to point at.
 
    procedure Load_Files
-     (Self  : in out Context'Class;
-      Units : Libadalang.Analysis.Analysis_Unit_Array);
+     (Self     : in out Context'Class;
+      Units    : Libadalang.Analysis.Analysis_Unit_Array;
+      Warnings : in out VSS.String_Vectors.Virtual_String_Vector);
 
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type)
@@ -363,9 +366,47 @@ package body Munin.Contexts is
    end Append_Task_Unique;
 
    procedure Load_Files
-     (Self  : in out Context'Class;
-      Units : Libadalang.Analysis.Analysis_Unit_Array)
+     (Self     : in out Context'Class;
+      Units    : Libadalang.Analysis.Analysis_Unit_Array;
+      Warnings : in out VSS.String_Vectors.Virtual_String_Vector)
    is
+      function Compute_Own_Sources
+        return VSS.String_Vectors.Virtual_String_Vector;
+      --  The root project's own Ada source files -- not its dependencies,
+      --  and not the runtime -- unlike Self.Sources, which deliberately
+      --  spans the whole project closure (needed for Units, so that
+      --  project-wide P_Find_All_Calls queries below also see calls made
+      --  from within a dependency). A call whose target object can't be
+      --  determined is only worth reporting when it sits in this
+      --  narrower set: a call inside a dependency (e.g. Ada.
+      --  Synchronous_Task_Control's own body, parameterized over "any
+      --  object of this type") is typically unresolvable there by
+      --  construction, and not something the project's own author can
+      --  act on.
+
+      function Compute_Own_Sources
+        return VSS.String_Vectors.Virtual_String_Vector
+      is
+         use type GPR2.Language_Id;
+
+         Result : VSS.String_Vectors.Virtual_String_Vector;
+      begin
+         for Source of Self.Project_Tree.Root_Project.Sources loop
+            if Source.Language = GPR2.Ada_Language
+              and then Source.Path_Name.Has_Value
+            then
+               Result.Append
+                 (VSS.Strings.Conversions.To_Virtual_String
+                    (String (Source.Path_Name.Value)));
+            end if;
+         end loop;
+
+         return Result;
+      end Compute_Own_Sources;
+
+      Own_Sources : constant VSS.String_Vectors.Virtual_String_Vector :=
+        Compute_Own_Sources;
+
       function Call_Site_Position
         (Ref : Libadalang.Analysis.Base_Id'Class) return Optional_Position;
       --  Ref's own position, unless it is the selector of a dotted
@@ -399,17 +440,144 @@ package body Munin.Contexts is
          return To_Source_Position (Ref.Unit, Ref.Sloc_Range);
       end Call_Site_Position;
 
-      procedure Collect_Entries (Decl : Libadalang.Analysis.Basic_Decl'Class);
-      --  For every entry in Decl's (a protected declaration's) visible
-      --  part, resolve every call to it project-wide (via
-      --  Units/P_Find_All_Calls) and record each call site's own
-      --  position, mapped to the entry body's own position, into
-      --  Entry_Call_Targets.
+      procedure Collect_Operations
+        (Decl  : Libadalang.Analysis.Basic_Decl'Class;
+         Owner : VSS.Strings.Virtual_String);
+      --  For every entry, procedure, or function in Decl's (a protected
+      --  declaration's) visible part, resolve every call to it
+      --  project-wide (via Units/P_Find_All_Calls) and record the object
+      --  it targets: Owner itself for an unqualified self-call from
+      --  within the object's own body (the only way Ada allows one), or
+      --  the call's dotted prefix resolved via Libadalang cross-reference
+      --  otherwise. A call whose target object can't be determined this
+      --  way is reported via Warnings instead of recorded. Entries
+      --  additionally resolve their own body position into Entry_Calls,
+      --  exactly as before -- unrelated machinery, untouched.
 
       procedure Process_Name (Name : Libadalang.Analysis.Defining_Name);
 
-      procedure Collect_Entries (Decl : Libadalang.Analysis.Basic_Decl'Class)
+      procedure Collect_Operations
+        (Decl  : Libadalang.Analysis.Basic_Decl'Class;
+         Owner : VSS.Strings.Virtual_String)
       is
+         function Owner_Of_Call
+           (Reference : Libadalang.Analysis.Base_Id'Class)
+            return VSS.Strings.Virtual_String;
+         --  The qualified name of the protected object statically
+         --  identified as the target of the call at Reference: Owner
+         --  itself when Reference is not the selector of a dotted name
+         --  (an unqualified self-call -- Ada requires a prefix for any
+         --  call from outside the object's own body, so this can only be
+         --  one), or the dotted name's prefix's referenced object
+         --  otherwise. Empty when the prefix doesn't resolve to a plain
+         --  object declaration -- an ordinary object (e.g. `Acc_10 :
+         --  Accumulator (10);`) or an anonymous single protected object
+         --  (`protected Guard is ... end Guard;`, whose own name resolves
+         --  directly to its Single_Protected_Decl, not to a wrapping
+         --  Object_Decl) -- or Property_Error is raised while trying.
+
+         function Owner_Of_Call
+           (Reference : Libadalang.Analysis.Base_Id'Class)
+            return VSS.Strings.Virtual_String
+         is
+            Parent : constant Libadalang.Analysis.Ada_Node :=
+              Reference.Parent;
+         begin
+            if Parent.Kind /= Libadalang.Common.Ada_Dotted_Name then
+               return Owner;
+            end if;
+
+            declare
+               Prefix : constant Libadalang.Analysis.Name :=
+                 Parent.As_Dotted_Name.F_Prefix;
+            begin
+               --  Reject anything more complex than a plain (possibly
+               --  qualified) name up front: P_Referenced_Decl on an
+               --  indexing expression like `Cells (I)` resolves to the
+               --  array object itself, discarding the index, which would
+               --  otherwise be silently (and wrongly) accepted as if it
+               --  named one specific element. Likewise for an explicit
+               --  dereference (`Ptr.all.Op`).
+               if Prefix.Kind
+                    not in Libadalang.Common.Ada_Identifier
+                         | Libadalang.Common.Ada_Dotted_Name
+               then
+                  return VSS.Strings.Empty_Virtual_String;
+               end if;
+
+               declare
+                  Object_Decl : constant Libadalang.Analysis.Basic_Decl :=
+                    Prefix.P_Referenced_Decl;
+               begin
+                  if Object_Decl.Is_Null
+                    or else Object_Decl.Kind
+                            not in Libadalang.Common.Ada_Object_Decl
+                                 | Libadalang.Common.Ada_Single_Protected_Decl
+                  then
+                     return VSS.Strings.Empty_Virtual_String;
+                  end if;
+
+                  return
+                    To_Virtual_String (Object_Decl.P_Fully_Qualified_Name);
+               end;
+            end;
+         exception
+            when Libadalang.Common.Property_Error =>
+               return VSS.Strings.Empty_Virtual_String;
+         end Owner_Of_Call;
+
+         procedure Handle_Call
+           (Reference : Libadalang.Analysis.Base_Id'Class);
+         --  Record Reference's target object in Protected_Operations, or
+         --  append a diagnostic to Warnings when it can't be determined --
+         --  but only when Reference itself sits in one of the project's
+         --  own sources. A call written inside the runtime's own
+         --  implementation (e.g. a generic protected-type body in
+         --  Ada.Synchronous_Task_Control, reached via Full_Type_Decl for
+         --  a private-type object like a Suspension_Object) is typically
+         --  parameterized over "any object of this type" and therefore
+         --  genuinely, permanently unresolvable there -- not a call the
+         --  project's own author can act on, so it is silently skipped
+         --  rather than reported.
+
+         procedure Handle_Call
+           (Reference : Libadalang.Analysis.Base_Id'Class)
+         is
+            function Trimmed_Image (Value : Positive) return String;
+
+            function Trimmed_Image (Value : Positive) return String is
+               Image : constant String := Value'Image;
+            begin
+               return Image (Image'First + 1 .. Image'Last);
+            end Trimmed_Image;
+
+            Call_Owner : VSS.Strings.Virtual_String;
+            Call_Site  : Position;
+         begin
+            if not Own_Sources.Contains
+                     (VSS.Strings.Conversions.To_Virtual_String
+                        (Reference.Unit.Get_Filename))
+            then
+               return;
+            end if;
+
+            Call_Owner := Owner_Of_Call (Reference);
+            Call_Site  := Call_Site_Position (Reference);
+
+            if Call_Owner.Is_Empty then
+               Warnings.Append
+                 (VSS.Strings.Conversions.To_Virtual_String
+                    (VSS.Strings.Conversions.To_UTF_8_String (Call_Site.File)
+                     & ":" & Trimmed_Image (Call_Site.Line)
+                     & ":" & Trimmed_Image (Call_Site.Column)
+                     & ": cannot determine which protected object is"
+                     & " called here"));
+            else
+               Self.Protected_Operations.Set_Protected_Object
+                 (Call_Site, Call_Owner);
+            end if;
+         end Handle_Call;
+
          Decls : constant Libadalang.Analysis.Ada_Node_List :=
            (case Decl.Kind is
               when Libadalang.Common.Ada_Single_Protected_Decl =>
@@ -428,38 +596,63 @@ package body Munin.Contexts is
          end if;
 
          for Item of Decls loop
-            if Item.Kind = Libadalang.Common.Ada_Entry_Decl then
-               declare
-                  Entry_Item : constant Libadalang.Analysis.Entry_Decl :=
-                    Item.As_Entry_Decl;
-                  Entry_Body : constant Libadalang.Analysis.Body_Node :=
-                    Entry_Item.P_Body_Part;
-               begin
-                  if not Entry_Body.Is_Null then
-                     declare
-                        Target_Position : constant Optional_Position :=
-                          To_Source_Position
-                            (Entry_Body.Unit, Entry_Body.Sloc_Range);
+            case Item.Kind is
+               when Libadalang.Common.Ada_Entry_Decl =>
+                  declare
+                     Entry_Item : constant Libadalang.Analysis.Entry_Decl :=
+                       Item.As_Entry_Decl;
+                     Entry_Body : constant Libadalang.Analysis.Body_Node :=
+                       Entry_Item.P_Body_Part;
+                  begin
+                     if not Entry_Body.Is_Null then
+                        declare
+                           Target_Position : constant Optional_Position :=
+                             To_Source_Position
+                               (Entry_Body.Unit, Entry_Body.Sloc_Range);
 
-                        Refs : constant Libadalang.Analysis.Ref_Result_Array :=
-                          Entry_Item.F_Spec.F_Entry_Name.P_Find_All_Calls
-                            (Units => Units);
-                     begin
-                        for Ref of Refs loop
-                           Self.Entry_Calls.Include
-                             (Call_Site_Position
-                                (Libadalang.Analysis.Ref (Ref)),
-                              Target_Position);
-                        end loop;
-                     end;
-                  end if;
-               end;
-            end if;
+                           Refs :
+                             constant Libadalang.Analysis.Ref_Result_Array :=
+                               Entry_Item.F_Spec.F_Entry_Name.P_Find_All_Calls
+                                 (Units => Units);
+                        begin
+                           for Ref of Refs loop
+                              declare
+                                 Reference :
+                                   constant Libadalang.Analysis.Base_Id'Class
+                                     := Libadalang.Analysis.Ref (Ref);
+                              begin
+                                 Self.Entry_Calls.Include
+                                   (Call_Site_Position (Reference),
+                                    Target_Position);
+                                 Handle_Call (Reference);
+                              end;
+                           end loop;
+                        end;
+                     end if;
+                  end;
+
+               when Libadalang.Common.Ada_Subp_Decl =>
+                  declare
+                     Subp_Item : constant Libadalang.Analysis.Subp_Decl :=
+                       Item.As_Subp_Decl;
+                     Refs      :
+                       constant Libadalang.Analysis.Ref_Result_Array :=
+                         Subp_Item.F_Subp_Spec.F_Subp_Name.P_Find_All_Calls
+                           (Units => Units);
+                  begin
+                     for Ref of Refs loop
+                        Handle_Call (Libadalang.Analysis.Ref (Ref));
+                     end loop;
+                  end;
+
+               when others =>
+                  null;
+            end case;
          end loop;
       exception
          when Libadalang.Common.Property_Error =>
             null;
-      end Collect_Entries;
+      end Collect_Operations;
 
       procedure Process_Name (Name : Libadalang.Analysis.Defining_Name) is
          Node : constant Libadalang.Analysis.Ada_Node := Name.Parent;
@@ -480,13 +673,18 @@ package body Munin.Contexts is
                      Priority       => Priority_For (Node.As_Basic_Decl)));
 
             when Libadalang.Common.Ada_Single_Protected_Decl =>
-               Self.Protected_Items.Append
-                 (Munin.Protected_Objects.Create
-                    (Qualified_Name =>
-                       To_Virtual_String
-                         (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                     Priority       => Priority_For (Node.As_Basic_Decl)));
-               Collect_Entries (Node.As_Basic_Decl);
+               declare
+                  Qualified_Name : constant VSS.Strings.Virtual_String :=
+                    To_Virtual_String
+                      (Node.As_Basic_Decl.P_Fully_Qualified_Name);
+               begin
+                  Self.Protected_Items.Include
+                    (Qualified_Name,
+                     Munin.Protected_Objects.Create
+                       (Qualified_Name => Qualified_Name,
+                        Priority       => Priority_For (Node.As_Basic_Decl)));
+                  Collect_Operations (Node.As_Basic_Decl, Qualified_Name);
+               end;
 
             --  A library-level object declaration of a named task/
             --  protected type (e.g. `Object : Protected_Type;`) is a
@@ -539,13 +737,21 @@ package body Munin.Contexts is
                   begin
                      if Type_Kind = Libadalang.Common.Ada_Protected_Type_Decl
                      then
-                        Self.Protected_Items.Append
-                          (Munin.Protected_Objects.Create
-                             (Qualified_Name =>
-                                To_Virtual_String
-                                  (Name.P_Fully_Qualified_Name),
-                              Priority       => Priority_For (Object_Decl)));
-                        Collect_Entries (Full_Type_Decl.As_Basic_Decl);
+                        declare
+                           Qualified_Name :
+                             constant VSS.Strings.Virtual_String :=
+                               To_Virtual_String
+                                 (Name.P_Fully_Qualified_Name);
+                        begin
+                           Self.Protected_Items.Include
+                             (Qualified_Name,
+                              Munin.Protected_Objects.Create
+                                (Qualified_Name => Qualified_Name,
+                                 Priority       =>
+                                   Priority_For (Object_Decl)));
+                           Collect_Operations
+                             (Full_Type_Decl.As_Basic_Decl, Qualified_Name);
+                        end;
 
                      elsif Type_Kind = Libadalang.Common.Ada_Task_Type_Decl
                      then
@@ -582,13 +788,15 @@ package body Munin.Contexts is
    procedure Load_Project
      (Self         : in out Context;
       Project_File : VSS.Strings.Virtual_String;
-      Errors       : out VSS.String_Vectors.Virtual_String_Vector)
+      Errors       : out VSS.String_Vectors.Virtual_String_Vector;
+      Warnings     : out VSS.String_Vectors.Virtual_String_Vector)
    is
       Path  : constant String :=
         VSS.Strings.Conversions.To_UTF_8_String (Project_File);
       Files : VSS.String_Vectors.Virtual_String_Vector;
    begin
       Errors.Clear;
+      Warnings.Clear;
       Self.Loaded_Project := Project_File;
       Self.Task_Items.Clear;
       Self.Protected_Items.Clear;
@@ -632,7 +840,7 @@ package body Munin.Contexts is
             end;
          end loop;
 
-         Self.Load_Files (Units);
+         Self.Load_Files (Units, Warnings);
       end;
 
       Self.Default_Ceiling :=
@@ -646,6 +854,7 @@ package body Munin.Contexts is
            (Provider.all,
             Self.Project_Tree,
             Self.Entry_Calls,
+            Self.Protected_Operations,
             Self.Call_Graph_Error);
 
          if Self.Call_Graph_Error.Is_Empty then
@@ -677,14 +886,19 @@ package body Munin.Contexts is
    function Protected_Objects
      (Self : Context) return Munin.Protected_Objects.Protected_Object_Array
    is
-      Last : constant Natural := Self.Protected_Items.Last_Index;
+      Last : constant Natural := Natural (Self.Protected_Items.Length);
    begin
       return
          Result : Munin.Protected_Objects.Protected_Object_Array (1 .. Last)
       do
-         for Index in Result'Range loop
-            Result (Index) := Self.Protected_Items.Element (Index);
-         end loop;
+         declare
+            Index : Positive := Result'First;
+         begin
+            for Item of Self.Protected_Items loop
+               Result (Index) := Item;
+               Index := Index + 1;
+            end loop;
+         end;
       end return;
    end Protected_Objects;
 

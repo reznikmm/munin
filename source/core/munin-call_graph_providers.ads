@@ -67,6 +67,25 @@ package Munin.Call_Graph_Providers is
    --  diagnostic purposes. Always False for a provider that does not do
    --  such a resolution.
 
+   function Is_Protected_Operation
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
+   is abstract;
+   --  True iff Node is a synthesized node produced by resolving some call
+   --  site to a specific protected object -- a fact about how Node was
+   --  constructed, not an independent declaration lookup. Unlike Is_Entry
+   --  (a narrow, entry-dispatcher-only diagnostic, unrelated to this),
+   --  this is defined uniformly for entries and ordinary protected
+   --  procedures/functions alike. Node's single callee (see Callees) is
+   --  always the real compiled operation body this node was resolved
+   --  against.
+
+   function Protected_Object_Name
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node)
+      return VSS.Strings.Virtual_String
+   is abstract;
+   --  The qualified name of the protected object Node was resolved to
+   --  attach to. Empty whenever Is_Protected_Operation is False.
+
    function Image
      (Self : Call_Graph_Provider; Node : Call_Graph_Node)
       return VSS.Strings.Virtual_String
