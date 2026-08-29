@@ -188,6 +188,11 @@ package body Test_Priority is
             Op.Assert (Task_Items'Length = 5);
             Op.Assert (Protected_Items'Length = 8);
 
+            --  System.Priority'Last for the target runtime, resolved via
+            --  Libadalang -- Ada RM D.3's default ceiling for a protected
+            --  object with no explicit Priority/Interrupt_Priority aspect.
+            Op.Assert (Munin.Contexts.Default_Ceiling (Context) = 254);
+
             for Item of Task_Items loop
                declare
                   Name : constant String :=

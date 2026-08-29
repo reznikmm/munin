@@ -12,7 +12,6 @@ with Langkit_Support.Text;
 with Libadalang.Common;
 
 with Munin.Call_Graph_Providers.CI;
-with Munin.Priorities;
 with Munin.Project_Loading;
 with Munin.Contexts.Traverses;
 
@@ -45,6 +44,14 @@ package body Munin.Contexts is
    function Priority_For
      (Decl : Libadalang.Analysis.Basic_Decl'Class)
       return Munin.Priorities.Optional_Priority;
+
+   function Resolve_Default_Ceiling
+     (Analysis_Context : Libadalang.Analysis.Analysis_Context'Class)
+      return Munin.Priorities.Priority_Value;
+   --  Evaluate System.Priority'Last for the runtime backing
+   --  Analysis_Context -- Ada RM D.3's default ceiling for a protected
+   --  object with no explicit Priority/Interrupt_Priority aspect, and the
+   --  effective priority a task is raised to upon entering one.
 
    procedure Append_Task_Unique
      (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit);
@@ -258,6 +265,69 @@ package body Munin.Contexts is
              & Ada.Exceptions.Exception_Message (E)
              & ")";
    end Priority_For;
+
+   -----------------------------
+   -- Resolve_Default_Ceiling --
+   -----------------------------
+
+   function Resolve_Default_Ceiling
+     (Analysis_Context : Libadalang.Analysis.Analysis_Context'Class)
+      return Munin.Priorities.Priority_Value
+   is
+      System_Unit : constant Libadalang.Analysis.Analysis_Unit :=
+        Analysis_Context.Get_From_Provider
+          (Name => Langkit_Support.Text.To_Text ("system"),
+           Kind => Libadalang.Common.Unit_Specification);
+
+      System_Decl : constant Libadalang.Analysis.Basic_Decl :=
+        (if System_Unit.Root.Is_Null
+           or else System_Unit.Root.Kind
+                   /= Libadalang.Common.Ada_Compilation_Unit
+         then Libadalang.Analysis.No_Basic_Decl
+         else System_Unit.Root.As_Compilation_Unit.P_Decl);
+
+      Public_Decls : constant Libadalang.Analysis.Ada_Node_List :=
+        (if System_Decl.Is_Null
+           or else System_Decl.Kind /= Libadalang.Common.Ada_Package_Decl
+         then Libadalang.Analysis.No_Ada_Node_List
+         else System_Decl.As_Base_Package_Decl.F_Public_Part.F_Decls);
+
+      Priority_Decl : Libadalang.Analysis.Base_Type_Decl :=
+        Libadalang.Analysis.No_Base_Type_Decl;
+   begin
+      if not Public_Decls.Is_Null then
+         for Item of Public_Decls loop
+            if Item.Kind = Libadalang.Common.Ada_Subtype_Decl
+              and then Ada.Characters.Handling.To_Lower
+                         (String
+                            (Langkit_Support.Text.To_UTF8
+                               (Item.As_Basic_Decl.P_Defining_Name.Text)))
+                       = "priority"
+            then
+               Priority_Decl := Item.As_Base_Type_Decl;
+               exit;
+            end if;
+         end loop;
+      end if;
+
+      if Priority_Decl.Is_Null then
+         raise Constraint_Error
+           with "Unable to locate System.Priority in the target runtime";
+      end if;
+
+      return
+        Munin.Priorities.Priority_Value'Value
+          (GNATCOLL.GMP.Integers.Image
+             (Libadalang.Analysis.High_Bound
+                (Priority_Decl.P_Discrete_Range)
+                .P_Eval_As_Int));
+
+   exception
+      when Libadalang.Common.Property_Error =>
+         raise Constraint_Error
+           with "Unable to resolve System.Priority'Last from the target"
+                & " runtime";
+   end Resolve_Default_Ceiling;
 
    procedure Append_Task_Unique
      (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit)
@@ -564,6 +634,9 @@ package body Munin.Contexts is
 
          Self.Load_Files (Units);
       end;
+
+      Self.Default_Ceiling :=
+        Resolve_Default_Ceiling (Self.Analysis_Context);
 
       declare
          Provider : constant CI_Provider_Access :=

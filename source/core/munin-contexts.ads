@@ -13,6 +13,7 @@ with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
 with Munin.Entry_Calls;
+with Munin.Priorities;
 with Munin.Protected_Objects;
 with Munin.Tasks;
 
@@ -41,6 +42,14 @@ package Munin.Contexts is
    --  Explanation for why Call_Graph is null; empty when Call_Graph is
    --  set.
 
+   function Default_Ceiling
+     (Self : Context) return Munin.Priorities.Priority_Value;
+   --  System.Priority'Last for the runtime Self was loaded against -- the
+   --  ceiling Ada RM D.3 assigns a protected object with no explicit
+   --  Priority/Interrupt_Priority aspect, and the effective priority a
+   --  task is raised to upon entering one. Meaningful only after a
+   --  successful Load_Project.
+
 private
 
    use type Munin.Tasks.Task_Unit;
@@ -68,6 +77,7 @@ private
       Call_Graph       : Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
       Call_Graph_Error : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
+      Default_Ceiling  : Munin.Priorities.Priority_Value := 0;
    end record;
 
    function Call_Graph
@@ -77,5 +87,9 @@ private
 
    function Call_Graph_Error (Self : Context) return VSS.Strings.Virtual_String
    is (Self.Call_Graph_Error);
+
+   function Default_Ceiling
+     (Self : Context) return Munin.Priorities.Priority_Value
+   is (Self.Default_Ceiling);
 
 end Munin.Contexts;
