@@ -61,6 +61,31 @@ package Munin.Contexts is
    --  task is raised to upon entering one. Meaningful only after a
    --  successful Load_Project.
 
+   function Default_Task_Priority
+     (Self : Context) return Munin.Priorities.Priority_Value;
+   --  System.Default_Priority for the runtime Self was loaded against --
+   --  the priority a task runs at when it has no explicit
+   --  Priority/Interrupt_Priority aspect. Meaningful only after a
+   --  successful Load_Project.
+
+   function Task_Priority
+     (Self           : Context;
+      Qualified_Name : VSS.Strings.Virtual_String)
+      return Munin.Priorities.Priority_Value;
+   --  The priority assigned to the task named Qualified_Name, or
+   --  Default_Task_Priority when it has no explicit priority or when
+   --  Qualified_Name matches no task known to Self (e.g. the environment
+   --  task, which has no Munin.Tasks.Task_Unit entry of its own).
+
+   function Protected_Object_Ceiling
+     (Self           : Context;
+      Qualified_Name : VSS.Strings.Virtual_String)
+      return Munin.Priorities.Priority_Value;
+   --  The ceiling of the protected object named Qualified_Name, or
+   --  Default_Ceiling when it has no explicit Priority/Interrupt_Priority
+   --  aspect or when Qualified_Name matches no protected object known to
+   --  Self (e.g. one Libadalang could not statically resolve a call to).
+
 private
 
    use type Munin.Tasks.Task_Unit;
@@ -83,20 +108,21 @@ private
    --  by qualified name.
 
    type Context is tagged limited record
-      Loaded_Project       : VSS.Strings.Virtual_String :=
+      Loaded_Project        : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Project_Tree         : GPR2.Project.Tree.Object;
-      Analysis_Context     : Libadalang.Analysis.Analysis_Context;
-      Sources              : VSS.String_Vectors.Virtual_String_Vector;
-      Task_Items           : Task_Unit_Vectors.Vector;
-      Protected_Items      : Protected_Object_Maps.Map;
-      Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
-      Protected_Operations : Munin.Protected_Operations.Registry;
-      Call_Graph           :
+      Project_Tree          : GPR2.Project.Tree.Object;
+      Analysis_Context      : Libadalang.Analysis.Analysis_Context;
+      Sources               : VSS.String_Vectors.Virtual_String_Vector;
+      Task_Items            : Task_Unit_Vectors.Vector;
+      Protected_Items       : Protected_Object_Maps.Map;
+      Entry_Calls           : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations  : Munin.Protected_Operations.Registry;
+      Call_Graph            :
         Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
-      Call_Graph_Error     : VSS.Strings.Virtual_String :=
+      Call_Graph_Error      : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Default_Ceiling      : Munin.Priorities.Priority_Value := 0;
+      Default_Ceiling       : Munin.Priorities.Priority_Value := 0;
+      Default_Task_Priority : Munin.Priorities.Priority_Value := 0;
    end record;
 
    function Call_Graph
@@ -110,5 +136,9 @@ private
    function Default_Ceiling
      (Self : Context) return Munin.Priorities.Priority_Value
    is (Self.Default_Ceiling);
+
+   function Default_Task_Priority
+     (Self : Context) return Munin.Priorities.Priority_Value
+   is (Self.Default_Task_Priority);
 
 end Munin.Contexts;

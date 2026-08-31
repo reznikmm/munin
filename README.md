@@ -13,9 +13,10 @@ WORK IN PROGRESS!
 Point Munin at a project's `.gpr` file and pick what to report:
 
 ```bash
-munin show priorities -P my_project.gpr
-munin show callgraph  -P my_project.gpr
-munin show cycles     -P my_project.gpr
+munin show priorities  -P my_project.gpr
+munin show callgraph   -P my_project.gpr
+munin show cycles      -P my_project.gpr
+munin check priorities -P my_project.gpr
 ```
 
 `show priorities` lists every discovered task and protected object with its
@@ -39,6 +40,16 @@ either two or more subprograms forming a strongly connected component, or
 a single subprogram that calls itself directly -- reachable from a task
 body or the main subprogram, derived from the same `-fcallgraph-info=su,da`
 output as `show callgraph`.
+
+`check priorities` checks the Ada RM D.3 priority-ceiling-locking protocol:
+for every task, it tracks the active priority the task runs at as it walks
+the call tree (raised to a protected object's ceiling on entry, and back
+down again on return), and reports every protected operation reachable at
+a priority higher than its object's ceiling -- exactly the condition that
+raises `Program_Error` at run time. Also derived from `-fcallgraph-info=su,da`
+output, and from the same priority resolution described below, falling
+back to `System.Default_Priority`/`System.Priority'Last` for a task or
+protected object with no explicit priority.
 
 ## Priority Resolution
 

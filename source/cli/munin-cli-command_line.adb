@@ -23,10 +23,12 @@ package body Munin.CLI.Command_Line is
          Value_Name  => "<project-file>",
          Description => "Path to the target Ada project (.gpr) file");
       Command_Option : constant VSS.Command_Line.Positional_Option :=
-        (Name => "command", Description => "Command to run: show");
+        (Name => "command", Description => "Command to run: show, check");
       Subject_Option : constant VSS.Command_Line.Positional_Option :=
         (Name        => "subject",
-         Description => "What to show: priorities, callgraph, cycles");
+         Description =>
+           "What to show: priorities, callgraph, cycles; "
+           & "what to check: priorities");
    begin
       Parser.Add_Option (Help_Option);
       Parser.Add_Option (Project_Option);
@@ -55,16 +57,28 @@ package body Munin.CLI.Command_Line is
               ("Missing required --project/-P argument"));
       end if;
 
-      if Parser.Value (Command_Option) /= "show" then
+      if Parser.Value (Command_Option) /= "show"
+        and then Parser.Value (Command_Option) /= "check"
+      then
          VSS.Command_Line.Report_Error
            (VSS.Strings.Conversions.To_Virtual_String
-              ("Expected command: show priorities|callgraph|cycles"));
+              ("Expected command: show priorities|callgraph|cycles, or "
+               & "check priorities"));
       end if;
 
       return Result : Command do
          Result.Project_File := Parser.Value (Project_Option);
 
-         if Parser.Value (Subject_Option) = "priorities" then
+         if Parser.Value (Command_Option) = "check" then
+            if Parser.Value (Subject_Option) = "priorities" then
+               Result.Subject := Check_Priorities;
+            else
+               VSS.Command_Line.Report_Error
+                 (VSS.Strings.Conversions.To_Virtual_String
+                    ("Expected subject: priorities"));
+            end if;
+
+         elsif Parser.Value (Subject_Option) = "priorities" then
             Result.Subject := Show_Priorities;
 
          elsif Parser.Value (Subject_Option) = "callgraph" then

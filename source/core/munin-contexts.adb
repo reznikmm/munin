@@ -5,6 +5,7 @@
 
 with Ada.Characters.Handling;
 with Ada.Exceptions;
+with Ada.Strings.Fixed;
 
 with GNATCOLL.GMP.Integers;
 with GPR2;
@@ -55,6 +56,13 @@ package body Munin.Contexts is
    --  Analysis_Context -- Ada RM D.3's default ceiling for a protected
    --  object with no explicit Priority/Interrupt_Priority aspect, and the
    --  effective priority a task is raised to upon entering one.
+
+   function Resolve_Default_Task_Priority
+     (Analysis_Context : Libadalang.Analysis.Analysis_Context'Class)
+      return Munin.Priorities.Priority_Value;
+   --  Evaluate System.Default_Priority for the runtime backing
+   --  Analysis_Context -- the priority a task runs at when it has no
+   --  explicit Priority/Interrupt_Priority aspect.
 
    procedure Append_Task_Unique
      (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit);
@@ -331,6 +339,68 @@ package body Munin.Contexts is
            with "Unable to resolve System.Priority'Last from the target"
                 & " runtime";
    end Resolve_Default_Ceiling;
+
+   -----------------------------------
+   -- Resolve_Default_Task_Priority --
+   -----------------------------------
+
+   function Resolve_Default_Task_Priority
+     (Analysis_Context : Libadalang.Analysis.Analysis_Context'Class)
+      return Munin.Priorities.Priority_Value
+   is
+      System_Unit : constant Libadalang.Analysis.Analysis_Unit :=
+        Analysis_Context.Get_From_Provider
+          (Name => Langkit_Support.Text.To_Text ("system"),
+           Kind => Libadalang.Common.Unit_Specification);
+
+      System_Decl : constant Libadalang.Analysis.Basic_Decl :=
+        (if System_Unit.Root.Is_Null
+           or else System_Unit.Root.Kind
+                   /= Libadalang.Common.Ada_Compilation_Unit
+         then Libadalang.Analysis.No_Basic_Decl
+         else System_Unit.Root.As_Compilation_Unit.P_Decl);
+
+      Public_Decls : constant Libadalang.Analysis.Ada_Node_List :=
+        (if System_Decl.Is_Null
+           or else System_Decl.Kind /= Libadalang.Common.Ada_Package_Decl
+         then Libadalang.Analysis.No_Ada_Node_List
+         else System_Decl.As_Base_Package_Decl.F_Public_Part.F_Decls);
+
+      Default_Priority_Decl : Libadalang.Analysis.Object_Decl :=
+        Libadalang.Analysis.No_Object_Decl;
+   begin
+      if not Public_Decls.Is_Null then
+         for Item of Public_Decls loop
+            if Item.Kind = Libadalang.Common.Ada_Object_Decl
+              and then Ada.Characters.Handling.To_Lower
+                         (String
+                            (Langkit_Support.Text.To_UTF8
+                               (Item.As_Basic_Decl.P_Defining_Name.Text)))
+                       = "default_priority"
+            then
+               Default_Priority_Decl := Item.As_Object_Decl;
+               exit;
+            end if;
+         end loop;
+      end if;
+
+      if Default_Priority_Decl.Is_Null then
+         raise Constraint_Error
+           with "Unable to locate System.Default_Priority in the target"
+                & " runtime";
+      end if;
+
+      return
+        Munin.Priorities.Priority_Value'Value
+          (GNATCOLL.GMP.Integers.Image
+             (Default_Priority_Decl.F_Default_Expr.P_Eval_As_Int));
+
+   exception
+      when Libadalang.Common.Property_Error =>
+         raise Constraint_Error
+           with "Unable to resolve System.Default_Priority from the target"
+                & " runtime";
+   end Resolve_Default_Task_Priority;
 
    procedure Append_Task_Unique
      (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit)
@@ -845,6 +915,8 @@ package body Munin.Contexts is
 
       Self.Default_Ceiling :=
         Resolve_Default_Ceiling (Self.Analysis_Context);
+      Self.Default_Task_Priority :=
+        Resolve_Default_Task_Priority (Self.Analysis_Context);
 
       declare
          Provider : constant CI_Provider_Access :=
@@ -901,5 +973,74 @@ package body Munin.Contexts is
          end;
       end return;
    end Protected_Objects;
+
+   function Simple_Name
+     (Value : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String
+   is
+      Text  : constant String :=
+        VSS.Strings.Conversions.To_UTF_8_String (Value);
+      Split : constant Natural :=
+        Ada.Strings.Fixed.Index (Text, ".", Ada.Strings.Backward);
+   begin
+      return
+        VSS.Strings.Conversions.To_Virtual_String
+          (if Split = 0 then Text else Text (Split + 1 .. Text'Last));
+   end Simple_Name;
+
+   function Task_Priority
+     (Self           : Context;
+      Qualified_Name : VSS.Strings.Virtual_String)
+      return Munin.Priorities.Priority_Value
+   is
+   begin
+      --  A Call_Graph_Provider's own Qualified_Name for a task root is
+      --  only ever the plain, unqualified identifier (see
+      --  Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node's
+      --  Name field) -- unlike Munin.Tasks.Qualified_Name, which is fully
+      --  dotted. Comparing simple names is the best available join;
+      --  ambiguous only when two tasks share a simple name across
+      --  different packages.
+      for Item of Self.Task_Items loop
+         if Simple_Name (Munin.Tasks.Qualified_Name (Item))
+           = Qualified_Name
+         then
+            declare
+               Priority : constant Munin.Priorities.Optional_Priority :=
+                 Munin.Tasks.Priority (Item);
+            begin
+               return
+                 (if Priority.Has_Value
+                  then Priority.Value
+                  else Self.Default_Task_Priority);
+            end;
+         end if;
+      end loop;
+
+      return Self.Default_Task_Priority;
+   end Task_Priority;
+
+   function Protected_Object_Ceiling
+     (Self           : Context;
+      Qualified_Name : VSS.Strings.Virtual_String)
+      return Munin.Priorities.Priority_Value
+   is
+      Cursor : constant Protected_Object_Maps.Cursor :=
+        Self.Protected_Items.Find (Qualified_Name);
+   begin
+      if not Protected_Object_Maps.Has_Element (Cursor) then
+         return Self.Default_Ceiling;
+      end if;
+
+      declare
+         Priority : constant Munin.Priorities.Optional_Priority :=
+           Munin.Protected_Objects.Priority
+             (Protected_Object_Maps.Element (Cursor));
+      begin
+         return
+           (if Priority.Has_Value
+            then Priority.Value
+            else Self.Default_Ceiling);
+      end;
+   end Protected_Object_Ceiling;
 
 end Munin.Contexts;

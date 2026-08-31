@@ -8,6 +8,7 @@ with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Contexts;
 with Munin.Priorities;
+with Munin.Priority_Checks;
 with Munin.Protected_Objects;
 with Munin.Tasks;
 
@@ -48,6 +49,10 @@ procedure Munin.CLI.Main is
    --  Print every group of mutually-recursive subprograms found by
    --  Munin.Call_Graph_Cycles.Cycles, rooted at Context's
    --  Call_Graph_Provider's Tasks.
+
+   procedure Print_Priority_Violations (Context : Munin.Contexts.Context);
+   --  Print every priority-ceiling-locking violation found by
+   --  Munin.Priority_Checks.Check.
 
    function Pad_Right (Text : String; Width : Natural) return String is
    begin
@@ -315,6 +320,81 @@ procedure Munin.CLI.Main is
         ("--------------------------------------------------");
    end Print_Cycles;
 
+   procedure Print_Priority_Violations (Context : Munin.Contexts.Context) is
+      Provider :
+        constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
+          Munin.Contexts.Call_Graph (Context);
+
+      procedure Print_Node
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
+
+      procedure Print_Node
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      is
+         Qualified_Name : constant VSS.Strings.Virtual_String :=
+           Provider.Qualified_Name (Node);
+         Name           : constant String :=
+           VSS.Strings.Conversions.To_UTF_8_String
+             (if Qualified_Name.Is_Empty
+              then Provider.Image (Node)
+              else Qualified_Name);
+         Position       : constant Munin.Optional_Position :=
+           Provider.Position (Node);
+      begin
+         Ada.Text_IO.Put ("    " & Name);
+
+         if Position.Is_Set then
+            Ada.Text_IO.Put
+              (" ("
+               & Ada.Directories.Simple_Name
+                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
+               & ":"
+               & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
+               & ":"
+               & Ada.Strings.Fixed.Trim
+                   (Position.Column'Image, Ada.Strings.Both)
+               & ")");
+         end if;
+
+         Ada.Text_IO.New_Line;
+      end Print_Node;
+
+      Violations : Munin.Priority_Checks.Violation_List;
+   begin
+      if Provider = null then
+         VSS.Command_Line.Report_Error
+           (Munin.Contexts.Call_Graph_Error (Context));
+      end if;
+
+      Violations := Munin.Priority_Checks.Check (Context, Provider.all);
+
+      Ada.Text_IO.Put_Line ("Priority-Ceiling Violations:");
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+
+      if Violations.Is_Empty then
+         Ada.Text_IO.Put_Line ("No priority-ceiling violations found.");
+      else
+         for Item of Violations loop
+            Ada.Text_IO.Put_Line
+              (VSS.Strings.Conversions.To_UTF_8_String (Item.Object_Name)
+               & "  ceiling:"
+               & Item.Ceiling'Image
+               & "  reached at priority:"
+               & Item.Reached_At'Image);
+
+            for Node of Item.Path loop
+               Print_Node (Node);
+            end loop;
+
+            Ada.Text_IO.New_Line;
+         end loop;
+      end if;
+
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+   end Print_Priority_Violations;
+
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
@@ -345,14 +425,17 @@ begin
       end loop;
 
       case Command.Subject is
-         when Munin.CLI.Command_Line.Show_Priorities =>
+         when Munin.CLI.Command_Line.Show_Priorities  =>
             Print_Priorities (Context);
 
-         when Munin.CLI.Command_Line.Show_Callgraph  =>
+         when Munin.CLI.Command_Line.Show_Callgraph   =>
             Print_Call_Graph (Context);
 
-         when Munin.CLI.Command_Line.Show_Cycles     =>
+         when Munin.CLI.Command_Line.Show_Cycles      =>
             Print_Cycles (Context);
+
+         when Munin.CLI.Command_Line.Check_Priorities =>
+            Print_Priority_Violations (Context);
       end case;
    end;
 end Munin.CLI.Main;
