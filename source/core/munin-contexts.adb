@@ -5,7 +5,6 @@
 
 with Ada.Characters.Handling;
 with Ada.Exceptions;
-with Ada.Strings.Fixed;
 
 with GNATCOLL.GMP.Integers;
 with GPR2;
@@ -85,6 +84,30 @@ package body Munin.Contexts is
       Sloc : Langkit_Support.Slocs.Source_Location_Range)
       return Optional_Position
    is (To_Source_Position (Unit, Langkit_Support.Slocs.Start_Sloc (Sloc)));
+
+   function Body_Position
+     (Decl      : Libadalang.Analysis.Basic_Decl'Class;
+      Body_Kind : Libadalang.Common.Ada_Node_Kind_Type)
+      return Optional_Position;
+   --  Decl's own body's declaration position (e.g. the `task body Foo is`
+   --  construct, for a task Decl) when Decl has a body of exactly
+   --  Body_Kind; Is_Set => False otherwise (Decl has no body, or one of a
+   --  different kind -- e.g. Decl is a generic template).
+
+   function Body_Position
+     (Decl      : Libadalang.Analysis.Basic_Decl'Class;
+      Body_Kind : Libadalang.Common.Ada_Node_Kind_Type)
+      return Optional_Position
+   is
+      Body_Part : constant Libadalang.Analysis.Body_Node :=
+        Decl.P_Body_Part_For_Decl;
+   begin
+      if Body_Part.Is_Null or else Body_Part.Kind /= Body_Kind then
+         return (Is_Set => False);
+      end if;
+
+      return To_Source_Position (Body_Part.Unit, Body_Part.Sloc_Range);
+   end Body_Position;
 
    procedure Append_Error
      (Errors : in out VSS.String_Vectors.Virtual_String_Vector; Value : String)
@@ -740,7 +763,11 @@ package body Munin.Contexts is
                     (Qualified_Name =>
                        To_Virtual_String
                          (Node.As_Basic_Decl.P_Fully_Qualified_Name),
-                     Priority       => Priority_For (Node.As_Basic_Decl)));
+                     Priority       => Priority_For (Node.As_Basic_Decl),
+                     Position       =>
+                       Body_Position
+                         (Node.As_Basic_Decl,
+                          Libadalang.Common.Ada_Task_Body)));
 
             when Libadalang.Common.Ada_Single_Protected_Decl =>
                declare
@@ -752,7 +779,12 @@ package body Munin.Contexts is
                     (Qualified_Name,
                      Munin.Protected_Objects.Create
                        (Qualified_Name => Qualified_Name,
-                        Priority       => Priority_For (Node.As_Basic_Decl)));
+                        Priority        =>
+                          Priority_For (Node.As_Basic_Decl),
+                        Position        =>
+                          Body_Position
+                            (Node.As_Basic_Decl,
+                             Libadalang.Common.Ada_Protected_Body)));
                   Collect_Operations (Node.As_Basic_Decl, Qualified_Name);
                end;
 
@@ -805,6 +837,13 @@ package body Munin.Contexts is
                           then Libadalang.Common.Ada_Node_Kind_Type'First
                           else Full_Type_Decl.Kind);
                   begin
+                     --  Position, here, is the shared task/protected
+                     --  type's own body -- every object of the same type
+                     --  necessarily gets the same Position, since GNAT
+                     --  compiles the type's body once. Task_Priority's
+                     --  Position-based match is then ambiguous among
+                     --  them, same as the call graph's own single shared
+                     --  `.ci` node for all such objects.
                      if Type_Kind = Libadalang.Common.Ada_Protected_Type_Decl
                      then
                         declare
@@ -817,8 +856,12 @@ package body Munin.Contexts is
                              (Qualified_Name,
                               Munin.Protected_Objects.Create
                                 (Qualified_Name => Qualified_Name,
-                                 Priority       =>
-                                   Priority_For (Object_Decl)));
+                                 Priority        =>
+                                   Priority_For (Object_Decl),
+                                 Position        =>
+                                   Body_Position
+                                     (Full_Type_Decl.As_Basic_Decl,
+                                      Libadalang.Common.Ada_Protected_Body)));
                            Collect_Operations
                              (Full_Type_Decl.As_Basic_Decl, Qualified_Name);
                         end;
@@ -831,7 +874,11 @@ package body Munin.Contexts is
                              (Qualified_Name =>
                                 To_Virtual_String
                                   (Name.P_Fully_Qualified_Name),
-                              Priority       => Priority_For (Object_Decl)));
+                              Priority       => Priority_For (Object_Decl),
+                              Position       =>
+                                Body_Position
+                                  (Full_Type_Decl.As_Basic_Decl,
+                                   Libadalang.Common.Ada_Task_Body)));
                      end if;
                   end;
                end if;
@@ -974,36 +1021,28 @@ package body Munin.Contexts is
       end return;
    end Protected_Objects;
 
-   function Simple_Name
-     (Value : VSS.Strings.Virtual_String) return VSS.Strings.Virtual_String
-   is
-      Text  : constant String :=
-        VSS.Strings.Conversions.To_UTF_8_String (Value);
-      Split : constant Natural :=
-        Ada.Strings.Fixed.Index (Text, ".", Ada.Strings.Backward);
-   begin
-      return
-        VSS.Strings.Conversions.To_Virtual_String
-          (if Split = 0 then Text else Text (Split + 1 .. Text'Last));
-   end Simple_Name;
-
    function Task_Priority
-     (Self           : Context;
-      Qualified_Name : VSS.Strings.Virtual_String)
+     (Self          : Context;
+      Task_Position : Munin.Optional_Position)
       return Munin.Priorities.Priority_Value
    is
    begin
-      --  A Call_Graph_Provider's own Qualified_Name for a task root is
-      --  only ever the plain, unqualified identifier (see
-      --  Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node's
-      --  Name field) -- unlike Munin.Tasks.Qualified_Name, which is fully
-      --  dotted. Comparing simple names is the best available join;
-      --  ambiguous only when two tasks share a simple name across
-      --  different packages.
+      --  Task_Position unset (no source position known for the root at
+      --  all -- true of the environment task, whose Position, when set,
+      --  points into compiler-generated code, not user source) always
+      --  means "no match": deliberately checked first and returned on
+      --  its own, rather than falling into the loop below and relying
+      --  on Optional_Position's predefined "=" to reject it -- two
+      --  unset positions *are* equal under that "=" (the variant has no
+      --  fields left to compare once Is_Set is False), so comparing an
+      --  unset Task_Position against an Item with an equally-unset
+      --  Position would otherwise match by accident.
+      if not Task_Position.Is_Set then
+         return Self.Default_Task_Priority;
+      end if;
+
       for Item of Self.Task_Items loop
-         if Simple_Name (Munin.Tasks.Qualified_Name (Item))
-           = Qualified_Name
-         then
+         if Munin.Tasks.Position (Item) = Task_Position then
             declare
                Priority : constant Munin.Priorities.Optional_Priority :=
                  Munin.Tasks.Priority (Item);

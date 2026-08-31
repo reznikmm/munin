@@ -70,6 +70,12 @@ package Munin.Call_Graph_Providers.CI_Databases is
       return Boolean;
    --  True for exactly the nodes Complete resolved an entry-call edge to.
 
+   function Is_Environment_Task
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+   --  True for exactly the node Tasks reports for gnatbind's fixed "main"
+   --  link name.
+
    function Is_Protected_Operation
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
       return Boolean;

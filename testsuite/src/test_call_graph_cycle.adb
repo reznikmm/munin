@@ -89,6 +89,8 @@ package body Test_Call_Graph_Cycle is
               (Test_Call_Graph_Support.Has_Caller
                  (Provider, Proc_A, "_ada_proc_b"));
 
+            --  Munin.Gnat_Decode.Decode re-cases by convention (GNAT's own
+            --  symbol table never preserves the original source casing).
             Op.Assert
               (VSS.Strings.Conversions.To_UTF_8_String
                  (Provider.Qualified_Name (Proc_A))

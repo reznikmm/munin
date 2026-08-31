@@ -71,7 +71,7 @@ package body Munin.Priority_Checks is
       for Root of Provider.Tasks loop
          declare
             Initial : constant Munin.Priorities.Priority_Value :=
-              Context.Task_Priority (Provider.Qualified_Name (Root));
+              Context.Task_Priority (Provider.Position (Root));
          begin
             if not Best.Contains (Root) or else Initial > Best (Root) then
                Best.Include (Root, Initial);

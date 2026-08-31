@@ -144,6 +144,16 @@ package body Munin.Call_Graph_Providers.CI is
       return Boolean
    is (Self.DB.Is_Entry (Node));
 
+   -------------------------
+   -- Is_Environment_Task --
+   -------------------------
+
+   overriding
+   function Is_Environment_Task
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.DB.Is_Environment_Task (Node));
+
    ----------------------------
    -- Is_Protected_Operation --
    ----------------------------

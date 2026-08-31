@@ -52,6 +52,11 @@ package Munin.Call_Graph_Providers.CI is
       return Boolean;
 
    overriding
+   function Is_Environment_Task
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+
+   overriding
    function Is_Protected_Operation
      (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
       return Boolean;

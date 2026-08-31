@@ -95,6 +95,8 @@ package body Test_Call_Graph_Hello_World is
               constant Munin.Call_Graph_Providers.Call_Graph_Node :=
                 Test_Call_Graph_Support.Node_Of (Provider, "_ada_hello_world");
          begin
+            --  Munin.Gnat_Decode.Decode re-cases by convention (GNAT's own
+            --  symbol table never preserves the original source casing).
             Op.Assert
               (VSS.Strings.Conversions.To_UTF_8_String
                  (Provider.Qualified_Name (Hello_World_Node))

@@ -6,6 +6,7 @@
 with VSS.Strings.Conversions;
 
 with Munin.Call_Graph_Providers.CI_Parsers;
+with Munin.Gnat_Decode;
 
 package body Munin.Call_Graph_Providers.CI_Databases is
 
@@ -399,6 +400,15 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    is (Self.Entry_Nodes.Contains (Self.Symbol_Of (Node)));
 
    -------------------------
+   -- Is_Environment_Task --
+   -------------------------
+
+   function Is_Environment_Task
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.Symbol_Of (Node) = "main");
+
+   -------------------------
    -- Known_Indirect_Call --
    -------------------------
 
@@ -524,7 +534,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
       return
         (if Self.Sources.Contains (Symbol)
-         then Self.Sources (Symbol).Node.Name
+         then Munin.Gnat_Decode.Decode (Symbol)
          else VSS.Strings.Empty_Virtual_String);
    end Qualified_Name;
 

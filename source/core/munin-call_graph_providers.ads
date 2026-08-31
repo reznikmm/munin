@@ -67,6 +67,15 @@ package Munin.Call_Graph_Providers is
    --  diagnostic purposes. Always False for a provider that does not do
    --  such a resolution.
 
+   function Is_Environment_Task
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
+   is abstract;
+   --  True iff Node is the environment task (RM 10.2) -- the linked
+   --  partition's actual entry point, with no Ada-level declaration of
+   --  its own. Always one of Self.Tasks; Position for it, when set,
+   --  points into compiler-generated code (e.g. gnatbind's bind file),
+   --  never user source.
+
    function Is_Protected_Operation
      (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
    is abstract;

@@ -69,13 +69,15 @@ package Munin.Contexts is
    --  successful Load_Project.
 
    function Task_Priority
-     (Self           : Context;
-      Qualified_Name : VSS.Strings.Virtual_String)
+     (Self          : Context;
+      Task_Position : Munin.Optional_Position)
       return Munin.Priorities.Priority_Value;
-   --  The priority assigned to the task named Qualified_Name, or
-   --  Default_Task_Priority when it has no explicit priority or when
-   --  Qualified_Name matches no task known to Self (e.g. the environment
-   --  task, which has no Munin.Tasks.Task_Unit entry of its own).
+   --  The priority assigned to the task whose body is declared at
+   --  Task_Position, or Default_Task_Priority when it has no explicit
+   --  priority, when Task_Position matches no task known to Self (e.g.
+   --  the environment task, whose Position points into compiler-
+   --  generated code, not any Munin.Tasks.Task_Unit's own), or when
+   --  Task_Position itself is unset.
 
    function Protected_Object_Ceiling
      (Self           : Context;
