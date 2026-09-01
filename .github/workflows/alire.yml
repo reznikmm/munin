@@ -45,12 +45,19 @@ jobs:
     needs: check-tag
     if: needs.check-tag.outputs.match == 'true'
     strategy:
+      fail-fast: false
       matrix:
         include:
         - os: ubuntu-latest
           asset: munin-linux-x86_64
           exe: munin
+        - os: ubuntu-24.04-arm
+          asset: munin-linux-arm64
+          exe: munin
         - os: macos-latest
+          asset: munin-macos-arm64
+          exe: munin
+        - os: macos-26-intel
           asset: munin-macos-x86_64
           exe: munin
         - os: windows-latest
@@ -60,6 +67,14 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - uses: alire-project/setup-alire@v6
+    - name: Hack libgpr2 on windows
+      if: ${{ runner.os == 'Windows' }}
+      run: |
+        New-Item -ItemType Directory -Path "alire\cache\pins" -Force | Out-Null
+        New-Item -ItemType SymbolicLink            `
+         -Path   "alire\cache\pins\gprconfig_kbdb" `
+         -Target                  "gprconfig_kb\db"
+
     - name: Turn shared dependencies off
       run: alr settings --global --set dependencies.shared false
     - name: Build project
@@ -74,6 +89,7 @@ jobs:
 
   release:
     needs: build
+    if: ${{ always() && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
