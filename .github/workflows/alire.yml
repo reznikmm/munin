@@ -16,7 +16,7 @@ jobs:
       run: alr settings --global --set dependencies.shared false
     - name: Build project
       run: alr build
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: munin-linux-x86_64
         path: bin/munin
@@ -82,23 +82,23 @@ jobs:
     - name: Rename binary
       shell: bash
       run: cp bin/${{ matrix.exe }} ${{ matrix.asset }}
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.asset }}
         path: ${{ matrix.asset }}
 
   release:
-    needs: build
-    if: ${{ always() && needs.build.result != 'cancelled' }}
+    needs: [check-tag, build]
+    if: ${{ always() && needs.check-tag.outputs.match == 'true' && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         path: dist
         pattern: munin-*
         merge-multiple: true
-    - uses: softprops/action-gh-release@v2
+    - uses: softprops/action-gh-release@v3
       with:
         files: dist/*
