@@ -91,4 +91,18 @@ package body Priority_Sample is
       end loop;
    end Pragma_Task;
 
+   protected body Interrupt_Controller is
+
+      procedure Modern_Handler is
+      begin
+         null;
+      end Modern_Handler;
+
+      procedure Legacy_Handler is
+      begin
+         null;
+      end Legacy_Handler;
+
+   end Interrupt_Controller;
+
 end Priority_Sample;

@@ -14,6 +14,7 @@ with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
 with Munin.Entry_Calls;
+with Munin.Interrupt_Handlers;
 with Munin.Priorities;
 with Munin.Protected_Objects;
 with Munin.Protected_Operations;
@@ -42,6 +43,16 @@ package Munin.Contexts is
    function Protected_Objects
      (Self : Context) return Munin.Protected_Objects.Protected_Object_Array;
 
+   function Interrupt_Handlers
+     (Self : Context) return Munin.Interrupt_Handlers.Interrupt_Handler_Array;
+   --  Every protected procedure registered as an interrupt handler --
+   --  Ada RM C.3.1's Interrupt_Handler or Attach_Handler aspect (or its
+   --  pre-aspect pragma equivalent) -- found anywhere in the project.
+   --  Like a task, and unlike an ordinary protected operation, an
+   --  interrupt handler is invoked by the runtime with no static caller
+   --  of its own, so it is meant to serve as an extra analysis root
+   --  alongside Tasks (e.g. for cycle detection), not merely as a callee.
+
    function Call_Graph
      (Self : Context)
       return Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
@@ -69,8 +80,7 @@ package Munin.Contexts is
    --  successful Load_Project.
 
    function Task_Priority
-     (Self          : Context;
-      Task_Position : Munin.Optional_Position)
+     (Self : Context; Task_Position : Munin.Optional_Position)
       return Munin.Priorities.Priority_Value;
    --  The priority assigned to the task whose body is declared at
    --  Task_Position, or Default_Task_Priority when it has no explicit
@@ -80,8 +90,7 @@ package Munin.Contexts is
    --  Task_Position itself is unset.
 
    function Protected_Object_Ceiling
-     (Self           : Context;
-      Qualified_Name : VSS.Strings.Virtual_String)
+     (Self : Context; Qualified_Name : VSS.Strings.Virtual_String)
       return Munin.Priorities.Priority_Value;
    --  The ceiling of the protected object named Qualified_Name, or
    --  Default_Ceiling when it has no explicit Priority/Interrupt_Priority
@@ -92,11 +101,17 @@ private
 
    use type Munin.Tasks.Task_Unit;
    use type Munin.Protected_Objects.Protected_Object;
+   use type Munin.Interrupt_Handlers.Interrupt_Handler;
 
    package Task_Unit_Vectors is new
      Ada.Containers.Vectors
        (Index_Type   => Positive,
         Element_Type => Munin.Tasks.Task_Unit);
+
+   package Interrupt_Handler_Vectors is new
+     Ada.Containers.Vectors
+       (Index_Type   => Positive,
+        Element_Type => Munin.Interrupt_Handlers.Interrupt_Handler);
 
    package Protected_Object_Maps is new
      Ada.Containers.Ordered_Maps
@@ -110,21 +125,22 @@ private
    --  by qualified name.
 
    type Context is tagged limited record
-      Loaded_Project        : VSS.Strings.Virtual_String :=
+      Loaded_Project          : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Project_Tree          : GPR2.Project.Tree.Object;
-      Analysis_Context      : Libadalang.Analysis.Analysis_Context;
-      Sources               : VSS.String_Vectors.Virtual_String_Vector;
-      Task_Items            : Task_Unit_Vectors.Vector;
-      Protected_Items       : Protected_Object_Maps.Map;
-      Entry_Calls           : Munin.Entry_Calls.Entry_Call_Register;
-      Protected_Operations  : Munin.Protected_Operations.Registry;
-      Call_Graph            :
+      Project_Tree            : GPR2.Project.Tree.Object;
+      Analysis_Context        : Libadalang.Analysis.Analysis_Context;
+      Sources                 : VSS.String_Vectors.Virtual_String_Vector;
+      Task_Items              : Task_Unit_Vectors.Vector;
+      Protected_Items         : Protected_Object_Maps.Map;
+      Interrupt_Handler_Items : Interrupt_Handler_Vectors.Vector;
+      Entry_Calls             : Munin.Entry_Calls.Entry_Call_Register;
+      Protected_Operations    : Munin.Protected_Operations.Registry;
+      Call_Graph              :
         Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
-      Call_Graph_Error      : VSS.Strings.Virtual_String :=
+      Call_Graph_Error        : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
-      Default_Ceiling       : Munin.Priorities.Priority_Value := 0;
-      Default_Task_Priority : Munin.Priorities.Priority_Value := 0;
+      Default_Ceiling         : Munin.Priorities.Priority_Value := 0;
+      Default_Task_Priority   : Munin.Priorities.Priority_Value := 0;
    end record;
 
    function Call_Graph

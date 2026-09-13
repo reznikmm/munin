@@ -7,6 +7,7 @@ with Munin.CLI.Command_Line;
 with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Contexts;
+with Munin.Interrupt_Handlers;
 with Munin.Priorities;
 with Munin.Priority_Checks;
 with Munin.Protected_Objects;
@@ -53,6 +54,9 @@ procedure Munin.CLI.Main is
    procedure Print_Priority_Violations (Context : Munin.Contexts.Context);
    --  Print every priority-ceiling-locking violation found by
    --  Munin.Priority_Checks.Check.
+
+   procedure Print_Interrupts (Context : Munin.Contexts.Context);
+   --  Print the "Interrupt Handlers" report.
 
    function Pad_Right (Text : String; Width : Natural) return String is
    begin
@@ -325,11 +329,9 @@ procedure Munin.CLI.Main is
         constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
           Munin.Contexts.Call_Graph (Context);
 
-      procedure Print_Node
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
+      procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
 
-      procedure Print_Node
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
       is
          Qualified_Name : constant VSS.Strings.Virtual_String :=
            Provider.Qualified_Name (Node);
@@ -395,6 +397,56 @@ procedure Munin.CLI.Main is
         ("--------------------------------------------------");
    end Print_Priority_Violations;
 
+   procedure Print_Interrupts (Context : Munin.Contexts.Context) is
+      Handler_Items :
+        constant Munin.Interrupt_Handlers.Interrupt_Handler_Array :=
+          Munin.Contexts.Interrupt_Handlers (Context);
+      Name_Width    : Natural := 0;
+   begin
+      for Item of Handler_Items loop
+         declare
+            Name : constant String :=
+              VSS.Strings.Conversions.To_UTF_8_String
+                (Munin.Interrupt_Handlers.Qualified_Name (Item));
+         begin
+            if Name'Length > Name_Width then
+               Name_Width := Name'Length;
+            end if;
+         end;
+      end loop;
+
+      Ada.Text_IO.Put_Line ("Interrupt Handlers:");
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+
+      for Item of Handler_Items loop
+         declare
+            Name    : constant String :=
+              VSS.Strings.Conversions.To_UTF_8_String
+                (Munin.Interrupt_Handlers.Qualified_Name (Item));
+            Owner   : constant VSS.Strings.Virtual_String :=
+              Munin.Interrupt_Handlers.Protected_Object (Item);
+            Ceiling : constant Munin.Priorities.Priority_Value :=
+              Munin.Contexts.Protected_Object_Ceiling (Context, Owner);
+         begin
+            Ada.Text_IO.Put_Line
+              (Pad_Right (Name, Name_Width)
+               & "  Protected Object: "
+               & VSS.Strings.Conversions.To_UTF_8_String (Owner)
+               & "  Priority: "
+               & Ada.Strings.Fixed.Trim (Ceiling'Image, Ada.Strings.Both));
+         end;
+      end loop;
+
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+      Ada.Text_IO.Put_Line
+        ("Scan complete. Found "
+         & Ada.Strings.Fixed.Trim
+             (Handler_Items'Length'Image, Ada.Strings.Both)
+         & " interrupt handlers.");
+   end Print_Interrupts;
+
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
@@ -433,6 +485,9 @@ begin
 
          when Munin.CLI.Command_Line.Show_Cycles      =>
             Print_Cycles (Context);
+
+         when Munin.CLI.Command_Line.Show_Interrupts  =>
+            Print_Interrupts (Context);
 
          when Munin.CLI.Command_Line.Check_Priorities =>
             Print_Priority_Violations (Context);

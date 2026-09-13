@@ -66,6 +66,16 @@ package body Munin.Contexts is
    procedure Append_Task_Unique
      (Self : in out Context'Class; Item : Munin.Tasks.Task_Unit);
 
+   procedure Append_Interrupt_Handler_Unique
+     (Self : in out Context'Class;
+      Item : Munin.Interrupt_Handlers.Interrupt_Handler);
+   --  Self.Interrupt_Handler_Items.Append (Item), unless Item's Qualified_
+   --  Name is already present -- true whenever the same protected type's
+   --  handler procedure is seen again through another object of that type
+   --  (Collect_Operations runs once per object, but a handler procedure's
+   --  own declaration, and hence Qualified_Name, is shared by every object
+   --  of its type).
+
    function To_Virtual_String
      (Value : Langkit_Support.Text.Text_Type) return VSS.Strings.Virtual_String
    is (VSS.Strings.To_Virtual_String (Value));
@@ -352,15 +362,15 @@ package body Munin.Contexts is
       return
         Munin.Priorities.Priority_Value'Value
           (GNATCOLL.GMP.Integers.Image
-             (Libadalang.Analysis.High_Bound
-                (Priority_Decl.P_Discrete_Range)
+             (Libadalang.Analysis.High_Bound (Priority_Decl.P_Discrete_Range)
                 .P_Eval_As_Int));
 
    exception
       when Libadalang.Common.Property_Error =>
          raise Constraint_Error
-           with "Unable to resolve System.Priority'Last from the target"
-                & " runtime";
+           with
+             "Unable to resolve System.Priority'Last from the target"
+             & " runtime";
    end Resolve_Default_Ceiling;
 
    -----------------------------------
@@ -409,8 +419,9 @@ package body Munin.Contexts is
 
       if Default_Priority_Decl.Is_Null then
          raise Constraint_Error
-           with "Unable to locate System.Default_Priority in the target"
-                & " runtime";
+           with
+             "Unable to locate System.Default_Priority in the target"
+             & " runtime";
       end if;
 
       return
@@ -421,8 +432,9 @@ package body Munin.Contexts is
    exception
       when Libadalang.Common.Property_Error =>
          raise Constraint_Error
-           with "Unable to resolve System.Default_Priority from the target"
-                & " runtime";
+           with
+             "Unable to resolve System.Default_Priority from the target"
+             & " runtime";
    end Resolve_Default_Task_Priority;
 
    procedure Append_Task_Unique
@@ -458,13 +470,29 @@ package body Munin.Contexts is
       Self.Task_Items.Append (Item);
    end Append_Task_Unique;
 
+   procedure Append_Interrupt_Handler_Unique
+     (Self : in out Context'Class;
+      Item : Munin.Interrupt_Handlers.Interrupt_Handler)
+   is
+      Name : constant VSS.Strings.Virtual_String :=
+        Munin.Interrupt_Handlers.Qualified_Name (Item);
+   begin
+      for Existing of Self.Interrupt_Handler_Items loop
+         if Munin.Interrupt_Handlers.Qualified_Name (Existing) = Name then
+            return;
+         end if;
+      end loop;
+
+      Self.Interrupt_Handler_Items.Append (Item);
+   end Append_Interrupt_Handler_Unique;
+
    procedure Load_Files
      (Self     : in out Context'Class;
       Units    : Libadalang.Analysis.Analysis_Unit_Array;
       Warnings : in out VSS.String_Vectors.Virtual_String_Vector)
    is
       function Compute_Own_Sources
-        return VSS.String_Vectors.Virtual_String_Vector;
+         return VSS.String_Vectors.Virtual_String_Vector;
       --  The root project's own Ada source files -- not its dependencies,
       --  and not the runtime -- unlike Self.Sources, which deliberately
       --  spans the whole project closure (needed for Units, so that
@@ -478,7 +506,7 @@ package body Munin.Contexts is
       --  act on.
 
       function Compute_Own_Sources
-        return VSS.String_Vectors.Virtual_String_Vector
+         return VSS.String_Vectors.Virtual_String_Vector
       is
          use type GPR2.Language_Id;
 
@@ -573,8 +601,7 @@ package body Munin.Contexts is
            (Reference : Libadalang.Analysis.Base_Id'Class)
             return VSS.Strings.Virtual_String
          is
-            Parent : constant Libadalang.Analysis.Ada_Node :=
-              Reference.Parent;
+            Parent : constant Libadalang.Analysis.Ada_Node := Reference.Parent;
          begin
             if Parent.Kind /= Libadalang.Common.Ada_Dotted_Name then
                return Owner;
@@ -592,8 +619,8 @@ package body Munin.Contexts is
                --  named one specific element. Likewise for an explicit
                --  dereference (`Ptr.all.Op`).
                if Prefix.Kind
-                    not in Libadalang.Common.Ada_Identifier
-                         | Libadalang.Common.Ada_Dotted_Name
+                  not in Libadalang.Common.Ada_Identifier
+                       | Libadalang.Common.Ada_Dotted_Name
                then
                   return VSS.Strings.Empty_Virtual_String;
                end if;
@@ -619,8 +646,7 @@ package body Munin.Contexts is
                return VSS.Strings.Empty_Virtual_String;
          end Owner_Of_Call;
 
-         procedure Handle_Call
-           (Reference : Libadalang.Analysis.Base_Id'Class);
+         procedure Handle_Call (Reference : Libadalang.Analysis.Base_Id'Class);
          --  Record Reference's target object in Protected_Operations, or
          --  append a diagnostic to Warnings when it can't be determined --
          --  but only when Reference itself sits in one of the project's
@@ -633,8 +659,7 @@ package body Munin.Contexts is
          --  project's own author can act on, so it is silently skipped
          --  rather than reported.
 
-         procedure Handle_Call
-           (Reference : Libadalang.Analysis.Base_Id'Class)
+         procedure Handle_Call (Reference : Libadalang.Analysis.Base_Id'Class)
          is
             function Trimmed_Image (Value : Positive) return String;
 
@@ -655,14 +680,16 @@ package body Munin.Contexts is
             end if;
 
             Call_Owner := Owner_Of_Call (Reference);
-            Call_Site  := Call_Site_Position (Reference);
+            Call_Site := Call_Site_Position (Reference);
 
             if Call_Owner.Is_Empty then
                Warnings.Append
                  (VSS.Strings.Conversions.To_Virtual_String
                     (VSS.Strings.Conversions.To_UTF_8_String (Call_Site.File)
-                     & ":" & Trimmed_Image (Call_Site.Line)
-                     & ":" & Trimmed_Image (Call_Site.Column)
+                     & ":"
+                     & Trimmed_Image (Call_Site.Line)
+                     & ":"
+                     & Trimmed_Image (Call_Site.Column)
                      & ": cannot determine which protected object is"
                      & " called here"));
             else
@@ -683,6 +710,70 @@ package body Munin.Contexts is
                 Decl.As_Protected_Type_Decl.F_Definition.F_Public_Part.F_Decls,
               when others                                      =>
                 Libadalang.Analysis.No_Ada_Node_List);
+
+         function Has_Handler_Pragma
+           (Op : Libadalang.Analysis.Basic_Decl'Class; Name : String)
+            return Boolean;
+         --  True when a `pragma Name (Op, ...);` -- the pre-aspect syntax
+         --  for Interrupt_Handler/Attach_Handler, naming Op as its first
+         --  argument -- sits among Decls, the same visible declarative
+         --  items Op itself was found in.
+
+         function Has_Handler_Pragma
+           (Op : Libadalang.Analysis.Basic_Decl'Class; Name : String)
+            return Boolean
+         is
+            Op_Name : constant String :=
+              Ada.Characters.Handling.To_Lower
+                (String
+                   (Langkit_Support.Text.To_UTF8 (Op.P_Defining_Name.Text)));
+         begin
+            if Decls.Is_Null then
+               return False;
+            end if;
+
+            for Item of Decls loop
+               if Item.Kind = Libadalang.Common.Ada_Pragma_Node
+                 and then Ada.Characters.Handling.To_Lower
+                            (String
+                               (Langkit_Support.Text.To_UTF8
+                                  (Item.As_Pragma_Node.F_Id.Text)))
+                          = Ada.Characters.Handling.To_Lower (Name)
+               then
+                  for Assoc of Item.As_Pragma_Node.F_Args loop
+                     if Ada.Characters.Handling.To_Lower
+                          (String
+                             (Langkit_Support.Text.To_UTF8
+                                (Assoc.P_Assoc_Expr.Text)))
+                       = Op_Name
+                     then
+                        return True;
+                     end if;
+                  end loop;
+               end if;
+            end loop;
+
+            return False;
+         end Has_Handler_Pragma;
+
+         function Is_Interrupt_Handler
+           (Op : Libadalang.Analysis.Basic_Decl'Class) return Boolean;
+         --  True when Op (an individual protected procedure) is itself
+         --  registered as an interrupt handler, via Ada RM C.3.1's
+         --  Interrupt_Handler or Attach_Handler aspect (modern `with ...`
+         --  syntax, recognized regardless of whether it carries a value)
+         --  or its pre-aspect pragma equivalent.
+
+         function Is_Interrupt_Handler
+           (Op : Libadalang.Analysis.Basic_Decl'Class) return Boolean
+         is (Op.P_Has_Aspect
+               (Langkit_Support.Text.To_Unbounded_Text
+                  (Langkit_Support.Text.To_Text ("Interrupt_Handler")))
+             or else Op.P_Has_Aspect
+                       (Langkit_Support.Text.To_Unbounded_Text
+                          (Langkit_Support.Text.To_Text ("Attach_Handler")))
+             or else Has_Handler_Pragma (Op, "Interrupt_Handler")
+             or else Has_Handler_Pragma (Op, "Attach_Handler"));
       begin
          if Decls.Is_Null then
             return;
@@ -711,8 +802,10 @@ package body Munin.Contexts is
                            for Ref of Refs loop
                               declare
                                  Reference :
-                                   constant Libadalang.Analysis.Base_Id'Class
-                                     := Libadalang.Analysis.Ref (Ref);
+                                   constant Libadalang
+                                              .Analysis
+                                              .Base_Id'Class :=
+                                     Libadalang.Analysis.Ref (Ref);
                               begin
                                  Self.Entry_Calls.Include
                                    (Call_Site_Position (Reference),
@@ -724,7 +817,7 @@ package body Munin.Contexts is
                      end if;
                   end;
 
-               when Libadalang.Common.Ada_Subp_Decl =>
+               when Libadalang.Common.Ada_Subp_Decl  =>
                   declare
                      Subp_Item : constant Libadalang.Analysis.Subp_Decl :=
                        Item.As_Subp_Decl;
@@ -736,9 +829,25 @@ package body Munin.Contexts is
                      for Ref of Refs loop
                         Handle_Call (Libadalang.Analysis.Ref (Ref));
                      end loop;
+
+                     if Is_Interrupt_Handler (Subp_Item.As_Basic_Decl) then
+                        Append_Interrupt_Handler_Unique
+                          (Self,
+                           Munin.Interrupt_Handlers.Create
+                             (Qualified_Name   =>
+                                To_Virtual_String
+                                  (Subp_Item
+                                     .As_Basic_Decl
+                                     .P_Fully_Qualified_Name),
+                              Protected_Object => Owner,
+                              Position         =>
+                                Body_Position
+                                  (Subp_Item.As_Basic_Decl,
+                                   Libadalang.Common.Ada_Subp_Body)));
+                     end if;
                   end;
 
-               when others =>
+               when others                           =>
                   null;
             end case;
          end loop;
@@ -779,9 +888,8 @@ package body Munin.Contexts is
                     (Qualified_Name,
                      Munin.Protected_Objects.Create
                        (Qualified_Name => Qualified_Name,
-                        Priority        =>
-                          Priority_For (Node.As_Basic_Decl),
-                        Position        =>
+                        Priority       => Priority_For (Node.As_Basic_Decl),
+                        Position       =>
                           Body_Position
                             (Node.As_Basic_Decl,
                              Libadalang.Common.Ada_Protected_Body)));
@@ -849,16 +957,14 @@ package body Munin.Contexts is
                         declare
                            Qualified_Name :
                              constant VSS.Strings.Virtual_String :=
-                               To_Virtual_String
-                                 (Name.P_Fully_Qualified_Name);
+                               To_Virtual_String (Name.P_Fully_Qualified_Name);
                         begin
                            Self.Protected_Items.Include
                              (Qualified_Name,
                               Munin.Protected_Objects.Create
                                 (Qualified_Name => Qualified_Name,
-                                 Priority        =>
-                                   Priority_For (Object_Decl),
-                                 Position        =>
+                                 Priority       => Priority_For (Object_Decl),
+                                 Position       =>
                                    Body_Position
                                      (Full_Type_Decl.As_Basic_Decl,
                                       Libadalang.Common.Ada_Protected_Body)));
@@ -917,6 +1023,7 @@ package body Munin.Contexts is
       Self.Loaded_Project := Project_File;
       Self.Task_Items.Clear;
       Self.Protected_Items.Clear;
+      Self.Interrupt_Handler_Items.Clear;
       Self.Call_Graph := null;
       Self.Call_Graph_Error := VSS.Strings.Empty_Virtual_String;
 
@@ -960,8 +1067,7 @@ package body Munin.Contexts is
          Self.Load_Files (Units, Warnings);
       end;
 
-      Self.Default_Ceiling :=
-        Resolve_Default_Ceiling (Self.Analysis_Context);
+      Self.Default_Ceiling := Resolve_Default_Ceiling (Self.Analysis_Context);
       Self.Default_Task_Priority :=
         Resolve_Default_Task_Priority (Self.Analysis_Context);
 
@@ -1021,11 +1127,23 @@ package body Munin.Contexts is
       end return;
    end Protected_Objects;
 
-   function Task_Priority
-     (Self          : Context;
-      Task_Position : Munin.Optional_Position)
-      return Munin.Priorities.Priority_Value
+   function Interrupt_Handlers
+     (Self : Context) return Munin.Interrupt_Handlers.Interrupt_Handler_Array
    is
+      Last : constant Natural := Self.Interrupt_Handler_Items.Last_Index;
+   begin
+      return
+         Result : Munin.Interrupt_Handlers.Interrupt_Handler_Array (1 .. Last)
+      do
+         for Index in Result'Range loop
+            Result (Index) := Self.Interrupt_Handler_Items.Element (Index);
+         end loop;
+      end return;
+   end Interrupt_Handlers;
+
+   function Task_Priority
+     (Self : Context; Task_Position : Munin.Optional_Position)
+      return Munin.Priorities.Priority_Value is
    begin
       --  Task_Position unset (no source position known for the root at
       --  all -- true of the environment task, whose Position, when set,
@@ -1059,8 +1177,7 @@ package body Munin.Contexts is
    end Task_Priority;
 
    function Protected_Object_Ceiling
-     (Self           : Context;
-      Qualified_Name : VSS.Strings.Virtual_String)
+     (Self : Context; Qualified_Name : VSS.Strings.Virtual_String)
       return Munin.Priorities.Priority_Value
    is
       Cursor : constant Protected_Object_Maps.Cursor :=

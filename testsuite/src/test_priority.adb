@@ -11,6 +11,7 @@ with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with GNAT.OS_Lib;
 with Munin.Contexts;
+with Munin.Interrupt_Handlers;
 with Munin.Priorities;
 with Munin.Protected_Objects;
 with Munin.Tasks;
@@ -149,6 +150,8 @@ package body Test_Priority is
          Found_Suspension_Object : Boolean := False;
          Found_Task_Local_Global : Boolean := False;
          Found_Main_Local_Global : Boolean := False;
+         Found_Modern_Handler    : Boolean := False;
+         Found_Legacy_Handler    : Boolean := False;
 
          function Lower_Name (Value : String) return String is
            (Ada.Characters.Handling.To_Lower (Value));
@@ -186,9 +189,13 @@ package body Test_Priority is
             Protected_Items :
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
+            Interrupt_Handler_Items :
+              constant Munin.Interrupt_Handlers.Interrupt_Handler_Array :=
+                Munin.Contexts.Interrupt_Handlers (Context);
          begin
             Op.Assert (Task_Items'Length = 5);
-            Op.Assert (Protected_Items'Length = 8);
+            Op.Assert (Protected_Items'Length = 9);
+            Op.Assert (Interrupt_Handler_Items'Length = 2);
 
             --  System.Priority'Last for the target runtime, resolved via
             --  Libadalang -- Ada RM D.3's default ceiling for a protected
@@ -322,6 +329,28 @@ package body Test_Priority is
                   end if;
                end;
             end loop;
+
+            for Item of Interrupt_Handler_Items loop
+               declare
+                  Name : constant String :=
+                    Lower_Name
+                      (VSS.Strings.Conversions.To_UTF_8_String
+                         (Munin.Interrupt_Handlers.Qualified_Name (Item)));
+                  Owner : constant String :=
+                    Lower_Name
+                      (VSS.Strings.Conversions.To_UTF_8_String
+                         (Munin.Interrupt_Handlers.Protected_Object (Item)));
+               begin
+                  Op.Assert (Contains (Owner, "interrupt_controller"));
+
+                  if Contains (Name, "modern_handler") then
+                     Found_Modern_Handler := True;
+
+                  elsif Contains (Name, "legacy_handler") then
+                     Found_Legacy_Handler := True;
+                  end if;
+               end;
+            end loop;
          end;
 
          Op.Assert (Found_Task);
@@ -337,6 +366,8 @@ package body Test_Priority is
          Op.Assert (Found_Suspension_Object);
          Op.Assert (Found_Task_Local_Global);
          Op.Assert (Found_Main_Local_Global);
+         Op.Assert (Found_Modern_Handler);
+         Op.Assert (Found_Legacy_Handler);
       end;
    end Test_Priority_Build;
 

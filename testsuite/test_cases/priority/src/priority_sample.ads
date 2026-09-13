@@ -7,6 +7,7 @@
 --  Munin priority-discovery testcase.
 --  This source is analyzed by Munin (via Libadalang); it is not executed.
 
+with Ada.Interrupts;
 with Ada.Synchronous_Task_Control;
 with System;
 
@@ -81,5 +82,23 @@ package Priority_Sample is
    --  runtime's private part) is implemented as protected. Only the object
    --  (Ready), not the type, should be reported.
    Ready : Ada.Synchronous_Task_Control.Suspension_Object;
+
+   --  A protected object with procedures registered as interrupt
+   --  handlers: one via the modern Attach_Handler aspect, one via the
+   --  pre-aspect Attach_Handler pragma. (The valueless Interrupt_Handler
+   --  aspect, which leaves a procedure available for dynamic attachment
+   --  at run time via Ada.Interrupts.Attach_Handler, is not exercised
+   --  here: this project's Ravenscar/Jorvik profile enforces the
+   --  No_Dynamic_Attachment restriction, which forbids it outright.)
+   protected Interrupt_Controller
+     with Interrupt_Priority => System.Interrupt_Priority'Last
+   is
+      procedure Modern_Handler
+        with Attach_Handler => Ada.Interrupts.Interrupt_ID'First;
+
+      procedure Legacy_Handler;
+      pragma Attach_Handler
+        (Legacy_Handler, Ada.Interrupts.Interrupt_ID'Last);
+   end Interrupt_Controller;
 
 end Priority_Sample;
