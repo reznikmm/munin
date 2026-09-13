@@ -18,12 +18,14 @@
 --  operation of some *other* protected object -- and then comes back to
 --  the original object is flagged.
 --
---  Limitation: a private subprogram declared inside the protected
---  object's own body, which itself calls back into one of the object's
---  public operations, is still an internal call by Ada's visibility
---  rules -- but Munin.Call_Graph_Providers has no way to distinguish
---  such a helper from an ordinary external subprogram, so this
---  (uncommon) pattern may be reported as a false positive.
+--  A private subprogram declared directly among the protected object's
+--  own protected_operation_items (Ada RM 9.4) -- a helper, not itself
+--  part of its visible or private spec -- has the same direct
+--  (unqualified-name) visibility to the object's own operations as they
+--  have to each other, so a chain that passes through it is recognized
+--  as internal too (see Munin.Contexts.Load_Files's Collect_Operations,
+--  which attributes such a helper's own callers to the object exactly
+--  as it does for a declared operation).
 
 with Ada.Containers.Vectors;
 

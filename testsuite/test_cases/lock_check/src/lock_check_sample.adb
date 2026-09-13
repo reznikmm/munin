@@ -43,4 +43,21 @@ package body Lock_Check_Sample is
       end Op;
    end Clean;
 
+   protected body Private_Helper is
+      procedure Helper is
+      begin
+         Inner;
+      end Helper;
+
+      procedure Enter is
+      begin
+         Helper;
+      end Enter;
+
+      procedure Inner is
+      begin
+         null;
+      end Inner;
+   end Private_Helper;
+
 end Lock_Check_Sample;

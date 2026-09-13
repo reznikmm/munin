@@ -88,8 +88,10 @@ package body Test_Lock_Checks is
                      Found_Reentered := True;
 
                   else
-                     --  Internal_Chain (a chain of plain internal calls)
-                     --  and Clean (never re-entered) are both clean --
+                     --  Internal_Chain (a chain of plain internal calls),
+                     --  Clean (never re-entered), and Private_Helper (a
+                     --  call chain through a subprogram declared directly
+                     --  in the protected body itself) are all clean --
                      --  any other reported violation is a false
                      --  positive.
                      Found_Unexpected := True;

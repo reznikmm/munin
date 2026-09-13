@@ -12,6 +12,7 @@ package body Lock_Check_Driver is
       Lock_Check_Sample.Internal_Chain.Enter;
       Lock_Check_Sample.Reentered.Enter;
       Lock_Check_Sample.Clean.Op;
+      Lock_Check_Sample.Private_Helper.Enter;
    end Driver;
 
 end Lock_Check_Driver;

@@ -34,4 +34,16 @@ package Lock_Check_Sample is
    end Clean;
    --  Never re-entered -- no violation expected here.
 
+   protected Private_Helper is
+      procedure Enter;
+      procedure Inner;
+   end Private_Helper;
+   --  Enter calls Helper -- a subprogram declared directly in
+   --  Private_Helper's own body (a protected_operation_item, Ada RM 9.4),
+   --  not part of its visible or private spec -- which itself calls
+   --  Inner. Helper has the same direct (unqualified-name) visibility to
+   --  Private_Helper's own operations as any of them has to each other
+   --  (Ada RM 9.5.1), so this whole chain is internal too -- never
+   --  reported.
+
 end Lock_Check_Sample;

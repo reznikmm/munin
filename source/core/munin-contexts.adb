@@ -851,6 +851,54 @@ package body Munin.Contexts is
                   null;
             end case;
          end loop;
+
+         --  A private subprogram declared directly among Decl's own
+         --  body's protected_operation_items (Ada RM 9.4) -- a helper,
+         --  not itself part of the protected declaration's visible or
+         --  private part -- has direct (unqualified-name) visibility to
+         --  every operation of the same object, exactly like one
+         --  operation calling another (Ada RM 9.5.1); attribute its own
+         --  callers to Owner the same way, so a call chain that passes
+         --  through it is still recognized as internal rather than as
+         --  having left the object.
+         declare
+            Body_Part : constant Libadalang.Analysis.Body_Node :=
+              Decl.P_Body_Part_For_Decl;
+         begin
+            if not Body_Part.Is_Null
+              and then Body_Part.Kind = Libadalang.Common.Ada_Protected_Body
+            then
+               declare
+                  Helper_Decls : constant Libadalang.Analysis.Ada_Node_List :=
+                    Body_Part.As_Protected_Body.F_Decls.F_Decls;
+               begin
+                  if not Helper_Decls.Is_Null then
+                     for Item of Helper_Decls loop
+                        if Item.Kind in Libadalang.Common.Ada_Base_Subp_Body
+                        then
+                           declare
+                              Helper_Item :
+                                constant Libadalang.Analysis.Base_Subp_Body :=
+                                  Item.As_Base_Subp_Body;
+                              Refs        :
+                                constant Libadalang
+                                           .Analysis
+                                           .Ref_Result_Array :=
+                                  Helper_Item
+                                    .F_Subp_Spec
+                                    .F_Subp_Name
+                                    .P_Find_All_Calls (Units => Units);
+                           begin
+                              for Ref of Refs loop
+                                 Handle_Call (Libadalang.Analysis.Ref (Ref));
+                              end loop;
+                           end;
+                        end if;
+                     end loop;
+                  end if;
+               end;
+            end if;
+         end;
       exception
          when Libadalang.Common.Property_Error =>
             null;
