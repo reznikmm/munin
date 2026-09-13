@@ -8,6 +8,7 @@ with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Contexts;
 with Munin.Interrupt_Handlers;
+with Munin.Lock_Checks;
 with Munin.Priorities;
 with Munin.Priority_Checks;
 with Munin.Protected_Objects;
@@ -57,6 +58,10 @@ procedure Munin.CLI.Main is
 
    procedure Print_Interrupts (Context : Munin.Contexts.Context);
    --  Print the "Interrupt Handlers" report.
+
+   procedure Print_Lock_Violations (Context : Munin.Contexts.Context);
+   --  Print every protected-object re-entry found by
+   --  Munin.Lock_Checks.Check.
 
    function Pad_Right (Text : String; Width : Natural) return String is
    begin
@@ -451,6 +456,76 @@ procedure Munin.CLI.Main is
          & " interrupt handlers.");
    end Print_Interrupts;
 
+   procedure Print_Lock_Violations (Context : Munin.Contexts.Context) is
+      Provider :
+        constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
+          Munin.Contexts.Call_Graph (Context);
+
+      procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
+
+      procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      is
+         Qualified_Name : constant VSS.Strings.Virtual_String :=
+           Provider.Qualified_Name (Node);
+         Name           : constant String :=
+           VSS.Strings.Conversions.To_UTF_8_String
+             (if Qualified_Name.Is_Empty
+              then Provider.Image (Node)
+              else Qualified_Name);
+         Position       : constant Munin.Optional_Position :=
+           Provider.Position (Node);
+      begin
+         Ada.Text_IO.Put ("    " & Name);
+
+         if Position.Is_Set then
+            Ada.Text_IO.Put
+              (" ("
+               & Ada.Directories.Simple_Name
+                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
+               & ":"
+               & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
+               & ":"
+               & Ada.Strings.Fixed.Trim
+                   (Position.Column'Image, Ada.Strings.Both)
+               & ")");
+         end if;
+
+         Ada.Text_IO.New_Line;
+      end Print_Node;
+
+      Violations : Munin.Lock_Checks.Violation_List;
+   begin
+      if Provider = null then
+         VSS.Command_Line.Report_Error
+           (Munin.Contexts.Call_Graph_Error (Context));
+      end if;
+
+      Violations := Munin.Lock_Checks.Check (Provider.all);
+
+      Ada.Text_IO.Put_Line ("Protected-Object Re-Entries:");
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+
+      if Violations.Is_Empty then
+         Ada.Text_IO.Put_Line ("No protected-object re-entries found.");
+      else
+         for Item of Violations loop
+            Ada.Text_IO.Put_Line
+              (VSS.Strings.Conversions.To_UTF_8_String (Item.Object_Name)
+               & "  called back into while already locked");
+
+            for Node of Item.Path loop
+               Print_Node (Node);
+            end loop;
+
+            Ada.Text_IO.New_Line;
+         end loop;
+      end if;
+
+      Ada.Text_IO.Put_Line
+        ("--------------------------------------------------");
+   end Print_Lock_Violations;
+
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
@@ -495,6 +570,9 @@ begin
 
          when Munin.CLI.Command_Line.Check_Priorities =>
             Print_Priority_Violations (Context);
+
+         when Munin.CLI.Command_Line.Check_Locks      =>
+            Print_Lock_Violations (Context);
       end case;
    end;
 end Munin.CLI.Main;

@@ -16,6 +16,7 @@ project-files = [
    "callgraph_entry/callgraph_entry.gpr",
    "protected_operations/protected_operations.gpr",
    "priority_check/priority_check.gpr",
+   "lock_check/lock_check.gpr",
 ]
 
 executables = []

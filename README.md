@@ -18,6 +18,7 @@ munin show callgraph   -P my_project.gpr
 munin show cycles      -P my_project.gpr
 munin show interrupts  -P my_project.gpr
 munin check priorities -P my_project.gpr
+munin check locks      -P my_project.gpr
 ```
 
 `show priorities` lists every discovered task and protected object with its
@@ -58,6 +59,19 @@ from `-fcallgraph-info=su,da` output, and from the same priority resolution
 described below, falling back to `System.Default_Priority`/
 `System.Priority'Last` for a task or protected object with no explicit
 priority.
+
+`check locks` reports every protected object called back into while a task
+is already inside one of its own operations, reached through some other
+subprogram rather than a direct call between two of the object's own
+operations -- exactly the condition that deadlocks (or raises
+`Program_Error`) at run time, since a protected object's lock is not
+reentrant for a call arriving that way. A direct call from one operation of
+a protected object straight to another operation of the *same* object is
+an internal call (Ada RM 9.5.1) and is always safe, no matter how many
+such calls chain together; only a path that leaves the object's own
+operations -- through an ordinary subprogram, or through an operation of
+some *other* protected object -- and then comes back is flagged. Also
+derived from `-fcallgraph-info=su,da` output.
 
 ## Priority Resolution
 

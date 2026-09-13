@@ -28,7 +28,7 @@ package body Munin.CLI.Command_Line is
         (Name        => "subject",
          Description =>
            "What to show: priorities, callgraph, cycles, interrupts; "
-           & "what to check: priorities");
+           & "what to check: priorities, locks");
    begin
       Parser.Add_Option (Help_Option);
       Parser.Add_Option (Project_Option);
@@ -64,7 +64,7 @@ package body Munin.CLI.Command_Line is
            (VSS.Strings.Conversions.To_Virtual_String
               ("Expected command: show "
                & "priorities|callgraph|cycles|interrupts, or "
-               & "check priorities"));
+               & "check priorities|locks"));
       end if;
 
       return Result : Command do
@@ -73,10 +73,14 @@ package body Munin.CLI.Command_Line is
          if Parser.Value (Command_Option) = "check" then
             if Parser.Value (Subject_Option) = "priorities" then
                Result.Subject := Check_Priorities;
+
+            elsif Parser.Value (Subject_Option) = "locks" then
+               Result.Subject := Check_Locks;
+
             else
                VSS.Command_Line.Report_Error
                  (VSS.Strings.Conversions.To_Virtual_String
-                    ("Expected subject: priorities"));
+                    ("Expected subject: priorities, locks"));
             end if;
 
          elsif Parser.Value (Subject_Option) = "priorities" then
