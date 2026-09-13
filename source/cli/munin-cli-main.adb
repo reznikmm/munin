@@ -43,8 +43,8 @@ procedure Munin.CLI.Main is
    --  Print the "Discovered Concurrency Objects" report.
 
    procedure Print_Call_Graph (Context : Munin.Contexts.Context);
-   --  Print the call tree rooted at every task/main entry point known to
-   --  Context's Call_Graph_Provider.
+   --  Print the call tree rooted at every task/main/interrupt-handler
+   --  entry point known to Context's Call_Graph_Provider.
 
    procedure Print_Cycles (Context : Munin.Contexts.Context);
    --  Print every group of mutually-recursive subprograms found by
@@ -242,6 +242,10 @@ procedure Munin.CLI.Main is
         ("--------------------------------------------------");
 
       for Root of Provider.Tasks loop
+         Print_Node (Root, 0, Path);
+      end loop;
+
+      for Root of Provider.Interrupt_Handlers loop
          Print_Node (Root, 0, Path);
       end loop;
 

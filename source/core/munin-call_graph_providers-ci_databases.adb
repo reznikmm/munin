@@ -195,7 +195,8 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    procedure Complete
      (Self                 : in out Database;
       Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
-      Protected_Operations : Munin.Protected_Operations.Registry)
+      Protected_Operations : Munin.Protected_Operations.Registry;
+      Interrupt_Handlers   : Munin.Interrupt_Handlers.Interrupt_Handler_Array)
    is
       package Position_To_Symbol_Maps is new
         Ada.Containers.Hashed_Maps
@@ -296,6 +297,47 @@ package body Munin.Call_Graph_Providers.CI_Databases is
             return Split_Symbol;
          end;
       end Split_Target;
+
+      function Root_Symbol_At
+        (Target_Position : Munin.Position) return VSS.Strings.Virtual_String;
+      --  Among every node whose own `.ci` position equals Target_Position
+      --  (an interrupt handler's own body position; a protected
+      --  procedure's locked "...P" and unprotected "...N" nodes both
+      --  carry their common source declaration's position -- see
+      --  Node_By_Position's doc comment above), the symbol of the one
+      --  Self believes is the actual entry point the runtime's interrupt
+      --  dispatch mechanism calls: the one ending in "P" when there is
+      --  one, since that is GNAT's mangling for the outer, lock-
+      --  acquiring version any external caller -- an ordinary call, or
+      --  here, the runtime -- actually invokes. Empty when
+      --  Target_Position matches no node at all.
+
+      function Root_Symbol_At
+        (Target_Position : Munin.Position) return VSS.Strings.Virtual_String
+      is
+         Best : VSS.Strings.Virtual_String := VSS.Strings.Empty_Virtual_String;
+      begin
+         for Cursor in Self.Sources.Iterate loop
+            if To_Position (Node_Maps.Element (Cursor).Node.Source)
+              = Target_Position
+            then
+               declare
+                  Symbol : constant VSS.Strings.Virtual_String :=
+                    Node_Maps.Key (Cursor);
+                  Text   : constant String :=
+                    VSS.Strings.Conversions.To_UTF_8_String (Symbol);
+               begin
+                  if Best.Is_Empty
+                    or else (Text'Length > 0 and then Text (Text'Last) = 'P')
+                  then
+                     Best := Symbol;
+                  end if;
+               end;
+            end if;
+         end loop;
+
+         return Best;
+      end Root_Symbol_At;
    begin
       for Cursor in Self.Sources.Iterate loop
          declare
@@ -346,6 +388,24 @@ package body Munin.Call_Graph_Providers.CI_Databases is
 
                Self.Reverse_Edges (Target).Include (Source);
             end loop;
+         end;
+      end loop;
+
+      for Handler of Interrupt_Handlers loop
+         declare
+            Handler_Position : constant Munin.Optional_Position :=
+              Munin.Interrupt_Handlers.Position (Handler);
+         begin
+            if Handler_Position.Is_Set then
+               declare
+                  Symbol : constant VSS.Strings.Virtual_String :=
+                    Root_Symbol_At (Handler_Position);
+               begin
+                  if not Symbol.Is_Empty then
+                     Self.Interrupt_Handler_Nodes.Include (Symbol);
+                  end if;
+               end;
+            end if;
          end;
       end loop;
 
@@ -723,6 +783,26 @@ package body Munin.Call_Graph_Providers.CI_Databases is
          end;
       end return;
    end Tasks;
+
+   ------------------------
+   -- Interrupt_Handlers --
+   ------------------------
+
+   function Interrupt_Handlers
+     (Self : Database) return Munin.Call_Graph_Providers.Call_Graph_Node_Array
+   is
+      Result :
+        Munin.Call_Graph_Providers.Call_Graph_Node_Array
+          (1 .. Natural (Self.Interrupt_Handler_Nodes.Length));
+      Index  : Positive := Result'First;
+   begin
+      for Symbol of Self.Interrupt_Handler_Nodes loop
+         Result (Index) := Self.Node_Of (Symbol);
+         Index := Index + 1;
+      end loop;
+
+      return Result;
+   end Interrupt_Handlers;
 
    -----------------
    -- To_Position --

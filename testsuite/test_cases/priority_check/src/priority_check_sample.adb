@@ -60,4 +60,18 @@ package body Priority_Check_Sample is
       Default_Object.Op;
    end Default_Task;
 
+   protected body Handler_Target is
+      procedure Op is
+      begin
+         null;
+      end Op;
+   end Handler_Target;
+
+   protected body Interrupt_Handler_Owner is
+      procedure Handle is
+      begin
+         Handler_Target.Op;
+      end Handle;
+   end Interrupt_Handler_Owner;
+
 end Priority_Check_Sample;

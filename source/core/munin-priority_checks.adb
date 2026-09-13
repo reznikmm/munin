@@ -67,17 +67,31 @@ package body Munin.Priority_Checks is
          end return;
       end Path_To;
 
+      procedure Seed_Root
+        (Root    : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Initial : Munin.Priorities.Priority_Value);
+      --  Best.Include (Root, Initial) and Worklist.Append (Root), unless
+      --  Root is already known at an active priority >= Initial.
+
+      procedure Seed_Root
+        (Root    : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Initial : Munin.Priorities.Priority_Value) is
+      begin
+         if not Best.Contains (Root) or else Initial > Best (Root) then
+            Best.Include (Root, Initial);
+            Worklist.Append (Root);
+         end if;
+      end Seed_Root;
+
    begin
       for Root of Provider.Tasks loop
-         declare
-            Initial : constant Munin.Priorities.Priority_Value :=
-              Context.Task_Priority (Provider.Position (Root));
-         begin
-            if not Best.Contains (Root) or else Initial > Best (Root) then
-               Best.Include (Root, Initial);
-               Worklist.Append (Root);
-            end if;
-         end;
+         Seed_Root (Root, Context.Task_Priority (Provider.Position (Root)));
+      end loop;
+
+      for Root of Provider.Interrupt_Handlers loop
+         Seed_Root
+           (Root,
+            Context.Interrupt_Handler_Priority (Provider.Position (Root)));
       end loop;
 
       while not Worklist.Is_Empty loop
@@ -99,8 +113,7 @@ package body Munin.Priority_Checks is
             end if;
 
             for Callee of Provider.Callees (Node) loop
-               if not Best.Contains (Callee)
-                 or else Propagated > Best (Callee)
+               if not Best.Contains (Callee) or else Propagated > Best (Callee)
                then
                   Best.Include (Callee, Propagated);
                   Predecessor.Include (Callee, Node);

@@ -9,6 +9,7 @@ with Ada.Containers.Hashed_Sets;
 with Ada.Containers.Vectors;
 
 with Munin.Entry_Calls;
+with Munin.Interrupt_Handlers;
 with Munin.Protected_Operations;
 with VSS.String_Vectors;
 with VSS.Strings.Hash;
@@ -37,7 +38,8 @@ package Munin.Call_Graph_Providers.CI_Databases is
    procedure Complete
      (Self                 : in out Database;
       Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
-      Protected_Operations : Munin.Protected_Operations.Registry);
+      Protected_Operations : Munin.Protected_Operations.Registry;
+      Interrupt_Handlers   : Munin.Interrupt_Handlers.Interrupt_Handler_Array);
    --  Fold every edge parsed by Load into Self's queryable Callees/Callers
    --  graph (deferred until now, rather than done per-file by Load, so
    --  that two distinct entry calls from the same caller -- otherwise
@@ -64,6 +66,13 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  target) pair -- see Is_Protected_Operation/Protected_Object_Name.
    --  That synthesized node's own (and only) callee is the original
    --  target, so Callees needs no special-casing for it at all.
+   --
+   --  Each element of Interrupt_Handlers (Munin.Contexts.
+   --  Interrupt_Handlers, resolved from the AST -- `.ci` carries no
+   --  explicit "this is an interrupt handler" tag any more than it does
+   --  for a task) is matched, by its own body's source position, against
+   --  a node found here; see Interrupt_Handlers (the function) for how
+   --  the match is disambiguated.
 
    function Is_Entry
      (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
@@ -122,6 +131,20 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  name. A heuristic tied to GNAT's current mangling and binding
    --  convention -- `.ci` carries no explicit "this is a task" tag -- not
    --  a guaranteed-stable contract.
+
+   function Interrupt_Handlers
+     (Self : Database) return Munin.Call_Graph_Providers.Call_Graph_Node_Array;
+   --  Nodes Complete resolved from the Interrupt_Handlers array it was
+   --  given: for each one whose own body position matches a node's
+   --  position here, the specific node believed to be the actual entry
+   --  point the runtime's interrupt dispatch mechanism calls -- GNAT
+   --  compiles a protected procedure into a locked, "...P"-suffixed outer
+   --  node (acquiring the object's lock, then calling the unprotected,
+   --  "...N"-suffixed inner node that holds the real body) that share one
+   --  source position, so the "...P" one is preferred whenever both are
+   --  found there. Fewer than Interrupt_Handlers'Length when a handler's
+   --  position matched no node at all (e.g. its unit wasn't compiled with
+   --  `-fcallgraph-info`).
 
    procedure Add_Entry
      (Self   : in out Database;
@@ -285,6 +308,10 @@ private
       --  Protected_Operation_Nodes member -> the qualified name of the
       --  protected object it was synthesized for; see
       --  Protected_Object_Name.
+
+      Interrupt_Handler_Nodes : String_Sets.Set;
+      --  Symbols Complete resolved from the Interrupt_Handlers array it
+      --  was given; see the function Interrupt_Handlers.
    end record;
 
 end Munin.Call_Graph_Providers.CI_Databases;

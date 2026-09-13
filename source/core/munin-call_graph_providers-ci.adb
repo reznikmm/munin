@@ -183,6 +183,7 @@ package body Munin.Call_Graph_Providers.CI is
       Tree                 : GPR2.Project.Tree.Object;
       Entry_Calls          : Munin.Entry_Calls.Entry_Call_Register;
       Protected_Operations : Munin.Protected_Operations.Registry;
+      Interrupt_Handlers   : Munin.Interrupt_Handlers.Interrupt_Handler_Array;
       Error                : out VSS.Strings.Virtual_String)
    is
       Files      : constant VSS.String_Vectors.Virtual_String_Vector :=
@@ -245,7 +246,7 @@ package body Munin.Call_Graph_Providers.CI is
          return;
       end if;
 
-      Self.DB.Complete (Entry_Calls, Protected_Operations);
+      Self.DB.Complete (Entry_Calls, Protected_Operations, Interrupt_Handlers);
    end Initialize;
 
    ---------------------
@@ -300,5 +301,15 @@ package body Munin.Call_Graph_Providers.CI is
      (Self : CI_Provider)
       return Munin.Call_Graph_Providers.Call_Graph_Node_Array
    is (Self.DB.Tasks);
+
+   ------------------------
+   -- Interrupt_Handlers --
+   ------------------------
+
+   overriding
+   function Interrupt_Handlers
+     (Self : CI_Provider)
+      return Munin.Call_Graph_Providers.Call_Graph_Node_Array
+   is (Self.DB.Interrupt_Handlers);
 
 end Munin.Call_Graph_Providers.CI;

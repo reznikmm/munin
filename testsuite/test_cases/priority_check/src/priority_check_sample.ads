@@ -7,6 +7,9 @@
 --  priority-check testcase. This source is analyzed by Munin (via
 --  Libadalang and its `.ci` call graph); it is not executed.
 
+with Ada.Interrupts;
+with System;
+
 package Priority_Check_Sample is
 
    --  Direct violation: High_Task's own priority (10) exceeds
@@ -48,5 +51,22 @@ package Priority_Check_Sample is
    end Default_Object;
 
    task Default_Task;
+
+   --  Interrupt-handler violation: an interrupt handler's own object
+   --  always runs at System.Interrupt_Priority'Last (this target's
+   --  runtime only supports the one interrupt priority level) -- which
+   --  then exceeds Handler_Target's ordinary ceiling (12) once the
+   --  handler calls into it. Exercises an interrupt handler procedure as
+   --  a call-graph root, exactly like a task.
+   protected Handler_Target with Priority => 12 is
+      procedure Op;
+   end Handler_Target;
+
+   protected Interrupt_Handler_Owner
+     with Interrupt_Priority => System.Interrupt_Priority'Last
+   is
+      procedure Handle
+        with Attach_Handler => Ada.Interrupts.Interrupt_ID'First;
+   end Interrupt_Handler_Owner;
 
 end Priority_Check_Sample;

@@ -1080,6 +1080,7 @@ package body Munin.Contexts is
             Self.Project_Tree,
             Self.Entry_Calls,
             Self.Protected_Operations,
+            Self.Interrupt_Handlers,
             Self.Call_Graph_Error);
 
          if Self.Call_Graph_Error.Is_Empty then
@@ -1175,6 +1176,28 @@ package body Munin.Contexts is
 
       return Self.Default_Task_Priority;
    end Task_Priority;
+
+   function Interrupt_Handler_Priority
+     (Self : Context; Handler_Position : Munin.Optional_Position)
+      return Munin.Priorities.Priority_Value is
+   begin
+      --  Handler_Position unset always means "no match" -- see
+      --  Task_Priority's own comment for why this is checked first
+      --  rather than relying on Optional_Position's predefined "=".
+      if not Handler_Position.Is_Set then
+         return Self.Default_Ceiling;
+      end if;
+
+      for Item of Self.Interrupt_Handler_Items loop
+         if Munin.Interrupt_Handlers.Position (Item) = Handler_Position then
+            return
+              Self.Protected_Object_Ceiling
+                (Munin.Interrupt_Handlers.Protected_Object (Item));
+         end if;
+      end loop;
+
+      return Self.Default_Ceiling;
+   end Interrupt_Handler_Priority;
 
    function Protected_Object_Ceiling
      (Self : Context; Qualified_Name : VSS.Strings.Virtual_String)

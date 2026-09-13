@@ -16,15 +16,22 @@ Point Munin at a project's `.gpr` file and pick what to report:
 munin show priorities  -P my_project.gpr
 munin show callgraph   -P my_project.gpr
 munin show cycles      -P my_project.gpr
+munin show interrupts  -P my_project.gpr
 munin check priorities -P my_project.gpr
 ```
 
 `show priorities` lists every discovered task and protected object with its
 resolved priority (see [Priority Resolution](#priority-resolution) below).
 
-`show callgraph` prints the call tree rooted at every task body and main
-subprogram, read from GCC's `-fcallgraph-info=su,da` output. Build the
-project with that switch first, e.g.:
+`show interrupts` lists every discovered interrupt handler procedure (see
+[Interrupt Handler Recognition](#interrupt-handler-recognition) below), its
+owning protected object, and that object's resolved priority -- the priority
+the handler actually runs at, per Ada RM C.3.1.
+
+`show callgraph` prints the call tree rooted at every task body, main
+subprogram, and interrupt handler procedure, read from GCC's
+`-fcallgraph-info=su,da` output. Build the project with that switch first,
+e.g.:
 
 ```ada
 package Compiler is
@@ -38,18 +45,19 @@ If no `.ci` file is found, Munin reports this and explains how to enable it.
 `show cycles` reports every group of mutually-recursive subprograms --
 either two or more subprograms forming a strongly connected component, or
 a single subprogram that calls itself directly -- reachable from a task
-body or the main subprogram, derived from the same `-fcallgraph-info=su,da`
-output as `show callgraph`.
+body, the main subprogram, or an interrupt handler procedure, derived from
+the same `-fcallgraph-info=su,da` output as `show callgraph`.
 
 `check priorities` checks the Ada RM D.3 priority-ceiling-locking protocol:
-for every task, it tracks the active priority the task runs at as it walks
-the call tree (raised to a protected object's ceiling on entry, and back
-down again on return), and reports every protected operation reachable at
-a priority higher than its object's ceiling -- exactly the condition that
-raises `Program_Error` at run time. Also derived from `-fcallgraph-info=su,da`
-output, and from the same priority resolution described below, falling
-back to `System.Default_Priority`/`System.Priority'Last` for a task or
-protected object with no explicit priority.
+for every task and interrupt handler, it tracks the active priority it runs
+at as it walks the call tree (raised to a protected object's ceiling on
+entry, and back down again on return), and reports every protected
+operation reachable at a priority higher than its object's ceiling --
+exactly the condition that raises `Program_Error` at run time. Also derived
+from `-fcallgraph-info=su,da` output, and from the same priority resolution
+described below, falling back to `System.Default_Priority`/
+`System.Priority'Last` for a task or protected object with no explicit
+priority.
 
 ## Priority Resolution
 
@@ -115,6 +123,37 @@ Ready : Ada.Synchronous_Task_Control.Suspension_Object;
 Only the object (`Ready`) is reported, never the private type itself. Since
 the implementation lives in the runtime and isn't visible from the
 analyzed source, its priority is reported as `(Default)`.
+
+## Interrupt Handler Recognition
+
+Munin finds every protected procedure registered as an interrupt handler,
+however it is declared:
+
+1. **Modern aspect** -- `Attach_Handler` (statically attached to a given
+   interrupt) or the valueless `Interrupt_Handler` (available for dynamic
+   attachment at run time via `Ada.Interrupts.Attach_Handler`):
+
+   ```ada
+   protected Interrupt_Controller
+     with Interrupt_Priority => System.Interrupt_Priority'Last
+   is
+      procedure Handle with Attach_Handler => Ada.Interrupts.Interrupt_ID'First;
+   end Interrupt_Controller;
+   ```
+
+2. **Pre-aspect pragma** -- the older `pragma Attach_Handler (...)`/
+   `pragma Interrupt_Handler (...)` form, recognized the same way as the
+   aspect syntax.
+
+An interrupt handler is invoked by the runtime directly, with no static
+caller of its own -- exactly like a task body -- so Munin treats it as an
+extra root alongside every task when walking the call tree: `show
+callgraph`, `show cycles`, and `check priorities` all reach it and
+whatever it calls, not just the object's own operations.
+
+Note the Ravenscar/Jorvik profile's `No_Dynamic_Attachment` restriction
+forbids the valueless `Interrupt_Handler` aspect outright -- only
+`Attach_Handler` (aspect or pragma) is actually usable under it.
 
 ## Effectively Global Locals
 

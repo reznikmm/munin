@@ -41,7 +41,7 @@ package body Munin.Call_Graph_Cycles is
       procedure Strong_Connect
         (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
       --  Tarjan's algorithm, run once per not-yet-visited node reachable
-      --  from a root in Provider.Tasks.
+      --  from a root in Provider.Tasks or Provider.Interrupt_Handlers.
 
       function Has_Self_Loop
         (Node : Munin.Call_Graph_Providers.Call_Graph_Node) return Boolean is
@@ -105,6 +105,12 @@ package body Munin.Call_Graph_Cycles is
 
    begin
       for Root of Provider.Tasks loop
+         if not Infos.Contains (Root) then
+            Strong_Connect (Root);
+         end if;
+      end loop;
+
+      for Root of Provider.Interrupt_Handlers loop
          if not Infos.Contains (Root) then
             Strong_Connect (Root);
          end if;

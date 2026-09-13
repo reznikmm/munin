@@ -83,6 +83,7 @@ package body Test_Priority_Checks is
                Found_Direct      : Boolean := False;
                Found_Nested      : Boolean := False;
                Found_Pkg_B_Guard : Boolean := False;
+               Found_Interrupt   : Boolean := False;
                Found_Unexpected  : Boolean := False;
             begin
                for Item of Violations loop
@@ -93,8 +94,7 @@ package body Test_Priority_Checks is
                      Op.Assert (not Item.Path.Is_Empty);
                      Found_Direct := True;
 
-                  elsif Item.Object_Name
-                    = "Priority_Check_Sample.Nested_Low"
+                  elsif Item.Object_Name = "Priority_Check_Sample.Nested_Low"
                   then
                      Op.Assert (Item.Ceiling = 8);
                      Op.Assert (Item.Reached_At = 20);
@@ -117,6 +117,19 @@ package body Test_Priority_Checks is
                      Op.Assert (not Item.Path.Is_Empty);
                      Found_Pkg_B_Guard := True;
 
+                  elsif Item.Object_Name
+                    = "Priority_Check_Sample.Handler_Target"
+                  then
+                     --  Reached from Interrupt_Handler_Owner.Handle, an
+                     --  interrupt handler root, at its object's own
+                     --  ceiling (System.Interrupt_Priority'Last) -- not
+                     --  Default_Task_Priority, which a Provider.Tasks-only
+                     --  root scan would have wrongly fallen back to.
+                     Op.Assert (Item.Ceiling = 12);
+                     Op.Assert (Item.Reached_At = 255);
+                     Op.Assert (not Item.Path.Is_Empty);
+                     Found_Interrupt := True;
+
                   else
                      --  Consistent, High_Ceiling, Default_Object, and
                      --  Priority_Check_Pkg_A.Guard are all clean (their
@@ -130,8 +143,9 @@ package body Test_Priority_Checks is
                Op.Assert (Found_Direct);
                Op.Assert (Found_Nested);
                Op.Assert (Found_Pkg_B_Guard);
+               Op.Assert (Found_Interrupt);
                Op.Assert (not Found_Unexpected);
-               Op.Assert (Natural (Violations.Length) = 3);
+               Op.Assert (Natural (Violations.Length) = 4);
             end;
          end;
       end;

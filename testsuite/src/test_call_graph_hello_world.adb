@@ -8,6 +8,7 @@ with GPR2.Project.Tree;
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.CI;
 with Munin.Entry_Calls;
+with Munin.Interrupt_Handlers;
 with Munin.Protected_Operations;
 with Test_Build_Support;
 with Test_Call_Graph_Support;
@@ -38,12 +39,14 @@ package body Test_Call_Graph_Hello_World is
       --  Testing: load the project, initialize the CI-backed call graph
       --  provider, and query it.
       declare
-         Tree     : GPR2.Project.Tree.Object;
-         Options  : GPR2.Options.Object := GPR2.Options.Empty_Options;
-         Provider   : aliased Munin.Call_Graph_Providers.CI.CI_Provider;
-         Empty      : Munin.Entry_Calls.Entry_Call_Register;
-         No_Objects : Munin.Protected_Operations.Registry;
-         Error      : VSS.Strings.Virtual_String;
+         Tree        : GPR2.Project.Tree.Object;
+         Options     : GPR2.Options.Object := GPR2.Options.Empty_Options;
+         Provider    : aliased Munin.Call_Graph_Providers.CI.CI_Provider;
+         Empty       : Munin.Entry_Calls.Entry_Call_Register;
+         No_Objects  : Munin.Protected_Operations.Registry;
+         No_Handlers :
+           Munin.Interrupt_Handlers.Interrupt_Handler_Array (1 .. 0);
+         Error       : VSS.Strings.Virtual_String;
       begin
          GPR2.Options.Add_Switch
            (Options,
@@ -62,11 +65,7 @@ package body Test_Call_Graph_Hello_World is
          end if;
 
          Munin.Call_Graph_Providers.CI.Initialize
-           (Provider,
-            Tree,
-            Empty,
-            No_Objects,
-            Error);
+           (Provider, Tree, Empty, No_Objects, No_Handlers, Error);
 
          if not Error.Is_Empty then
             Trendy_Test.Assertions.Fail

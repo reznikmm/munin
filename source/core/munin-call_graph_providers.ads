@@ -55,6 +55,15 @@ package Munin.Call_Graph_Providers is
    --  indirectly through gnatbind's generated bind file) known to Self,
    --  to use as roots when walking the call tree.
 
+   function Interrupt_Handlers
+     (Self : Call_Graph_Provider) return Call_Graph_Node_Array
+   is abstract;
+   --  Nodes for every interrupt handler procedure (see Munin.Contexts.
+   --  Interrupt_Handlers) known to Self, to use as extra roots alongside
+   --  Tasks when walking the call tree: the runtime invokes such a
+   --  procedure directly, with no static caller of its own, exactly like
+   --  a task body.
+
    function Is_Entry
      (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
    is abstract;

@@ -23,17 +23,14 @@ package body Test_Priority is
 
    Root : constant String :=
      Ada.Directories.Containing_Directory
-       (Ada.Directories.Containing_Directory
-          (Ada.Command_Line.Command_Name));
+       (Ada.Directories.Containing_Directory (Ada.Command_Line.Command_Name));
 
-   procedure Test_Priority_Build
-     (Op : in out Trendy_Test.Operation'Class)
-   is
+   procedure Test_Priority_Build (Op : in out Trendy_Test.Operation'Class) is
       use Ada.Strings.Unbounded;
 
       --  Path to the priority testcase crate, relative to testsuite root
       Crate_Dir : constant String := Root & "/test_cases/priority";
-      Log_File : constant String := Root & "/obj/test_priority_build.log";
+      Log_File  : constant String := Root & "/obj/test_priority_build.log";
 
       Max_Output_Length : constant Natural := 512;
 
@@ -77,7 +74,8 @@ package body Test_Priority is
             return Text;
          end if;
 
-         return "<output truncated to last "
+         return
+           "<output truncated to last "
            & Max_Output_Length'Image
            & " characters>"
            & Ada.Characters.Latin_1.LF
@@ -108,12 +106,7 @@ package body Test_Priority is
          Trendy_Test.Assertions.Fail (Op, "alr not found on PATH.");
          return;
       else
-         GNAT.OS_Lib.Spawn
-           (Command.all,
-            Args,
-            Log_File,
-            Success,
-            Result);
+         GNAT.OS_Lib.Spawn (Command.all, Args, Log_File, Success, Result);
       end if;
 
       if not Success or else Result /= 0 then
@@ -137,32 +130,33 @@ package body Test_Priority is
          Errors   : VSS.String_Vectors.Virtual_String_Vector;
          Warnings : VSS.String_Vectors.Virtual_String_Vector;
 
-         Found_Task      : Boolean := False;
-         Found_Protected : Boolean := False;
-         Found_Generic_Task : Boolean := False;
-         Found_Interrupt_Task : Boolean := False;
-         Found_Object_Task : Boolean := False;
-         Found_Object_Protected : Boolean := False;
-         Found_Discriminant_10 : Boolean := False;
-         Found_Discriminant_11 : Boolean := False;
-         Found_Pragma_Task : Boolean := False;
-         Found_Pragma_Protected : Boolean := False;
+         Found_Task              : Boolean := False;
+         Found_Protected         : Boolean := False;
+         Found_Generic_Task      : Boolean := False;
+         Found_Interrupt_Task    : Boolean := False;
+         Found_Object_Task       : Boolean := False;
+         Found_Object_Protected  : Boolean := False;
+         Found_Discriminant_10   : Boolean := False;
+         Found_Discriminant_11   : Boolean := False;
+         Found_Pragma_Task       : Boolean := False;
+         Found_Pragma_Protected  : Boolean := False;
          Found_Suspension_Object : Boolean := False;
          Found_Task_Local_Global : Boolean := False;
          Found_Main_Local_Global : Boolean := False;
          Found_Modern_Handler    : Boolean := False;
          Found_Legacy_Handler    : Boolean := False;
 
-         function Lower_Name (Value : String) return String is
-           (Ada.Characters.Handling.To_Lower (Value));
+         function Lower_Name (Value : String) return String
+         is (Ada.Characters.Handling.To_Lower (Value));
 
-         function Contains (Text, Pattern : String) return Boolean is
-           (Ada.Strings.Fixed.Index (Text, Pattern) > 0);
+         function Contains (Text, Pattern : String) return Boolean
+         is (Ada.Strings.Fixed.Index (Text, Pattern) > 0);
       begin
          Munin.Contexts.Load_Project
            (Self         => Context,
-            Project_File => VSS.Strings.Conversions.To_Virtual_String
-              (Crate_Dir & "/priority.gpr"),
+            Project_File =>
+              VSS.Strings.Conversions.To_Virtual_String
+                (Crate_Dir & "/priority.gpr"),
             Errors       => Errors,
             Warnings     => Warnings);
 
@@ -174,8 +168,7 @@ package body Test_Priority is
                for Item of Errors loop
                   Append (Message, Ada.Characters.Latin_1.LF);
                   Append
-                    (Message,
-                     VSS.Strings.Conversions.To_UTF_8_String (Item));
+                    (Message, VSS.Strings.Conversions.To_UTF_8_String (Item));
                end loop;
 
                Trendy_Test.Assertions.Fail (Op, To_String (Message));
@@ -184,9 +177,9 @@ package body Test_Priority is
          end if;
 
          declare
-            Task_Items : constant Munin.Tasks.Task_Unit_Array :=
+            Task_Items              : constant Munin.Tasks.Task_Unit_Array :=
               Munin.Contexts.Tasks (Context);
-            Protected_Items :
+            Protected_Items         :
               constant Munin.Protected_Objects.Protected_Object_Array :=
                 Munin.Contexts.Protected_Objects (Context);
             Interrupt_Handler_Items :
@@ -204,7 +197,7 @@ package body Test_Priority is
 
             for Item of Task_Items loop
                declare
-                  Name : constant String :=
+                  Name     : constant String :=
                     Lower_Name
                       (VSS.Strings.Conversions.To_UTF_8_String
                          (Munin.Tasks.Qualified_Name (Item)));
@@ -253,7 +246,7 @@ package body Test_Priority is
 
             for Item of Protected_Items loop
                declare
-                  Name : constant String :=
+                  Name     : constant String :=
                     Lower_Name
                       (VSS.Strings.Conversions.To_UTF_8_String
                          (Munin.Protected_Objects.Qualified_Name (Item)));
@@ -332,7 +325,7 @@ package body Test_Priority is
 
             for Item of Interrupt_Handler_Items loop
                declare
-                  Name : constant String :=
+                  Name  : constant String :=
                     Lower_Name
                       (VSS.Strings.Conversions.To_UTF_8_String
                          (Munin.Interrupt_Handlers.Qualified_Name (Item)));

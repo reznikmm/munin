@@ -89,6 +89,16 @@ package Munin.Contexts is
    --  generated code, not any Munin.Tasks.Task_Unit's own), or when
    --  Task_Position itself is unset.
 
+   function Interrupt_Handler_Priority
+     (Self : Context; Handler_Position : Munin.Optional_Position)
+      return Munin.Priorities.Priority_Value;
+   --  The ceiling of the protected object that owns the interrupt handler
+   --  procedure whose own body is declared at Handler_Position -- Ada RM
+   --  C.3.1's rule that an interrupt handler's active priority is its
+   --  object's interrupt priority -- or Default_Ceiling when
+   --  Handler_Position matches no interrupt handler known to Self, or is
+   --  itself unset.
+
    function Protected_Object_Ceiling
      (Self : Context; Qualified_Name : VSS.Strings.Virtual_String)
       return Munin.Priorities.Priority_Value;
