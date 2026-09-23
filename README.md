@@ -17,6 +17,7 @@ munin show priorities  -P my_project.gpr
 munin show callgraph   -P my_project.gpr
 munin show cycles      -P my_project.gpr
 munin show interrupts  -P my_project.gpr
+munin show stack       -P my_project.gpr
 munin check priorities -P my_project.gpr
 munin check locks      -P my_project.gpr
 ```
@@ -48,6 +49,21 @@ either two or more subprograms forming a strongly connected component, or
 a single subprogram that calls itself directly -- reachable from a task
 body, the main subprogram, or an interrupt handler procedure, derived from
 the same `-fcallgraph-info=su,da` output as `show callgraph`.
+
+`show stack` reports the worst-case stack usage of every task, the
+environment task, and every interrupt handler: its own static stack usage
+plus the maximum over all of its (recursively resolved) callees, walking
+the same `-fcallgraph-info=su,da`-derived call graph as the other `show`/
+`check` commands. A root whose call graph reaches a recursive cycle is
+flagged -- the reported figure is then a lower bound, not the true worst
+case, since the cycle's own contribution can't be statically bounded. A
+root that reaches an indirect call (through a pointer) or a dynamic
+(heap/secondary-stack) allocation is flagged too, for the same reason:
+neither contributes to the reported figure, so the true worst case may be
+higher. Munin does not check this figure against anything -- there's no
+declared "this task's stack must fit in N bytes" budget in the source to
+check it against -- it only reports the number; compare it yourself
+against your runtime's actual stack allocation for the object.
 
 `check priorities` checks the Ada RM D.3 priority-ceiling-locking protocol:
 for every task and interrupt handler, it tracks the active priority it runs
@@ -162,8 +178,8 @@ however it is declared:
 An interrupt handler is invoked by the runtime directly, with no static
 caller of its own -- exactly like a task body -- so Munin treats it as an
 extra root alongside every task when walking the call tree: `show
-callgraph`, `show cycles`, and `check priorities` all reach it and
-whatever it calls, not just the object's own operations.
+callgraph`, `show cycles`, `show stack`, and `check priorities` all reach
+it and whatever it calls, not just the object's own operations.
 
 Note the Ravenscar/Jorvik profile's `No_Dynamic_Attachment` restriction
 forbids the valueless `Interrupt_Handler` aspect outright -- only

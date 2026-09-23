@@ -63,6 +63,11 @@ procedure Munin.CLI.Main is
    --  Print every protected-object re-entry found by
    --  Munin.Lock_Checks.Check.
 
+   procedure Print_Stack_Usage (Context : Munin.Contexts.Context);
+   --  Print the worst-case stack usage, computed by
+   --  Munin.Call_Graph_Providers.Resolve, of every task and interrupt
+   --  handler known to Context's Call_Graph_Provider.
+
    function Pad_Right (Text : String; Width : Natural) return String is
    begin
       if Text'Length >= Width then
@@ -526,6 +531,117 @@ procedure Munin.CLI.Main is
         ("--------------------------------------------------");
    end Print_Lock_Violations;
 
+   procedure Print_Stack_Usage (Context : Munin.Contexts.Context) is
+      Provider :
+        constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
+          Munin.Contexts.Call_Graph (Context);
+
+      function Node_Name
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node) return String;
+
+      function Node_Name
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node) return String
+      is
+         Qualified_Name : constant VSS.Strings.Virtual_String :=
+           Provider.Qualified_Name (Node);
+      begin
+         return
+           VSS.Strings.Conversions.To_UTF_8_String
+             (if Qualified_Name.Is_Empty
+              then Provider.Image (Node)
+              else Qualified_Name);
+      end Node_Name;
+
+      procedure Print_Root
+        (Node       : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Label      : String;
+         Name_Width : Natural);
+
+      procedure Print_Root
+        (Node       : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Label      : String;
+         Name_Width : Natural)
+      is
+         Usage : constant Munin.Call_Graph_Providers.Stack_Usage :=
+           Provider.Resolve (Node);
+      begin
+         Ada.Text_IO.Put
+           (Pad_Right (Label, 13)
+            & " "
+            & Pad_Right (Node_Name (Node), Name_Width)
+            & "  Stack: "
+            & Ada.Strings.Fixed.Trim (Usage.Stack_Used'Image, Ada.Strings.Both)
+            & " bytes");
+
+         if Usage.Cycle then
+            Ada.Text_IO.Put ("  [call cycle: lower bound only]");
+         end if;
+
+         if Usage.Indirect_Calls > 0 then
+            Ada.Text_IO.Put
+              ("  [indirect calls: "
+               & Ada.Strings.Fixed.Trim
+                   (Usage.Indirect_Calls'Image, Ada.Strings.Both)
+               & "]");
+         end if;
+
+         if Usage.Dynamic_Objects > 0 then
+            Ada.Text_IO.Put
+              ("  [dynamic allocations: "
+               & Ada.Strings.Fixed.Trim
+                   (Usage.Dynamic_Objects'Image, Ada.Strings.Both)
+               & "]");
+         end if;
+
+         Ada.Text_IO.New_Line;
+      end Print_Root;
+
+   begin
+      if Provider = null then
+         VSS.Command_Line.Report_Error
+           (Munin.Contexts.Call_Graph_Error (Context));
+      end if;
+
+      declare
+         Task_Items    :
+           constant Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
+             Provider.Tasks;
+         Handler_Items :
+           constant Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
+             Provider.Interrupt_Handlers;
+         Name_Width    : Natural := 0;
+      begin
+         for Node of Task_Items loop
+            Name_Width := Natural'Max (Name_Width, Node_Name (Node)'Length);
+         end loop;
+
+         for Node of Handler_Items loop
+            Name_Width := Natural'Max (Name_Width, Node_Name (Node)'Length);
+         end loop;
+
+         Ada.Text_IO.Put_Line ("Worst-Case Stack Usage:");
+         Ada.Text_IO.Put_Line
+           ("--------------------------------------------------");
+
+         for Node of Task_Items loop
+            Print_Root (Node, "[TASK]", Name_Width);
+         end loop;
+
+         for Node of Handler_Items loop
+            Print_Root (Node, "[INTERRUPT]", Name_Width);
+         end loop;
+
+         Ada.Text_IO.Put_Line
+           ("--------------------------------------------------");
+         Ada.Text_IO.Put_Line
+           ("Scan complete. Found "
+            & Ada.Strings.Fixed.Trim
+                (Natural'(Task_Items'Length + Handler_Items'Length)'Image,
+                 Ada.Strings.Both)
+            & " roots.");
+      end;
+   end Print_Stack_Usage;
+
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
@@ -567,6 +683,9 @@ begin
 
          when Munin.CLI.Command_Line.Show_Interrupts  =>
             Print_Interrupts (Context);
+
+         when Munin.CLI.Command_Line.Show_Stack       =>
+            Print_Stack_Usage (Context);
 
          when Munin.CLI.Command_Line.Check_Priorities =>
             Print_Priority_Violations (Context);

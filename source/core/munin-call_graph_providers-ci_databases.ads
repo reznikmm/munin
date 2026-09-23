@@ -160,15 +160,10 @@ package Munin.Call_Graph_Providers.CI_Databases is
       Target : VSS.Strings.Virtual_String);
    --  Record a known target for an indirect call, identified by the chain
    --  of calling symbols that leads to it (innermost last); an empty but
-   --  non-null Target means the call is known to never execute. For the
-   --  future worst-case-stack feature; dormant for now.
+   --  non-null Target means the call is known to never execute. Consulted
+   --  by Resolve when it reaches an unresolved indirect call.
 
-   type Resolve_Result is record
-      Stack_Used      : Natural := 0;
-      Indirect_Calls  : Natural := 0;
-      Dynamic_Objects : Natural := 0;
-      Cycle           : Boolean := False;
-   end record;
+   subtype Resolve_Result is Munin.Call_Graph_Providers.Stack_Usage;
 
    function Resolve
      (Self : in out Database;
@@ -177,8 +172,6 @@ package Munin.Call_Graph_Providers.CI_Databases is
    --  maximum over all of its (recursively resolved) callees. Cycle is
    --  set when Node's call graph is (or reaches) a recursive cycle, in
    --  which case Stack_Used is a lower bound, not the true worst case.
-   --  For the future worst-case-stack feature; dormant for now (nothing
-   --  calls this yet).
 
 private
 

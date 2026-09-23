@@ -9,6 +9,7 @@
 --    munin show callgraph   -P <project-file>
 --    munin show cycles      -P <project-file>
 --    munin show interrupts  -P <project-file>
+--    munin show stack       -P <project-file>
 --    munin check priorities -P <project-file>
 --    munin check locks      -P <project-file>
 
@@ -21,6 +22,7 @@ package Munin.CLI.Command_Line is
       Show_Callgraph,
       Show_Cycles,
       Show_Interrupts,
+      Show_Stack,
       Check_Priorities,
       Check_Locks);
 
@@ -31,8 +33,8 @@ package Munin.CLI.Command_Line is
 
    function Parse return Command;
    --  Parse VSS.Application.Arguments as
-   --  `show priorities|callgraph|cycles|interrupts -P <project-file>` or
-   --  `check priorities|locks -P <project-file>`. On a parse error, an
+   --  `show priorities|callgraph|cycles|interrupts|stack -P <project-file>`
+   --  or `check priorities|locks -P <project-file>`. On a parse error, an
    --  unknown/missing argument, or -h/--help, reports the message and
    --  terminates the process (via
    --  VSS.Command_Line.Report_Error/Report_Message) instead of returning.

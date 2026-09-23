@@ -286,10 +286,11 @@ package body Munin.Call_Graph_Providers.CI is
    -- Resolve --
    -------------
 
+   overriding
    function Resolve
      (Self : in out CI_Provider;
       Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.CI_Databases.Resolve_Result
+      return Munin.Call_Graph_Providers.Stack_Usage
    is (Self.DB.Resolve (Node));
 
    -----------

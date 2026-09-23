@@ -100,12 +100,12 @@ package Munin.Call_Graph_Providers.CI is
    --  called automatically by Initialize -- there's no project-relative
    --  way to discover such a file.
 
+   overriding
    function Resolve
      (Self : in out CI_Provider;
       Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.CI_Databases.Resolve_Result;
-   --  See Munin.Call_Graph_Providers.CI_Databases.Resolve. For the future
-   --  worst-case-stack feature; dormant for now.
+      return Munin.Call_Graph_Providers.Stack_Usage;
+   --  See Munin.Call_Graph_Providers.CI_Databases.Resolve.
 
    function Find_CI_Files
      (Tree : GPR2.Project.Tree.Object)

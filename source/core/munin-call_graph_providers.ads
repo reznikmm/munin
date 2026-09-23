@@ -115,6 +115,27 @@ package Munin.Call_Graph_Providers is
    --  Hash for Node, so it can be used as the key of an
    --  Ada.Containers.Hashed_Maps.Map or Hashed_Sets.Set.
 
+   type Stack_Usage is record
+      Stack_Used      : Natural := 0;
+      Indirect_Calls  : Natural := 0;
+      Dynamic_Objects : Natural := 0;
+      Cycle           : Boolean := False;
+   end record;
+   --  Stack_Used is Node's own static stack plus the maximum over all of
+   --  its (recursively resolved) callees; Indirect_Calls/Dynamic_Objects
+   --  count, respectively, calls through a pointer and heap/secondary
+   --  stack allocations reachable from Node -- neither contributes to
+   --  Stack_Used, so a nonzero count means the true worst case may be
+   --  higher than reported. Cycle is set when Node's call graph is (or
+   --  reaches) a recursive cycle, in which case Stack_Used is a lower
+   --  bound, not the true worst case.
+
+   function Resolve
+     (Self : in out Call_Graph_Provider; Node : Call_Graph_Node)
+      return Stack_Usage
+   is abstract;
+   --  Worst-case stack usage rooted at Node; see Stack_Usage.
+
 private
 
    use type Ada.Containers.Hash_Type;
