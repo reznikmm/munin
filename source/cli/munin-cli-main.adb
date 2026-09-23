@@ -16,29 +16,66 @@ with Munin.Tasks;
 
 with Ada.Containers.Hashed_Sets;
 with Ada.Directories;
-with Ada.Strings;
-with Ada.Strings.Fixed;
-with Ada.Text_IO;
 
+with VSS.Characters.Latin;
 with VSS.Command_Line;
 with VSS.String_Vectors;
 with VSS.Strings;
 with VSS.Strings.Conversions;
+with VSS.Strings.Formatters.Integers;
+with VSS.Strings.Formatters.Strings;
 with VSS.Strings.Hash;
+with VSS.Strings.Templates;
+with VSS.Text_Streams;
+with VSS.Text_Streams.Standards;
 
 procedure Munin.CLI.Main is
 
    use type Munin.Call_Graph_Providers.Call_Graph_Provider_Access;
+   use type VSS.Strings.Character_Offset;
 
-   function Pad_Right (Text : String; Width : Natural) return String;
+   Output  : VSS.Text_Streams.Output_Text_Stream'Class :=
+     VSS.Text_Streams.Standards.Standard_Output;
+   Success : Boolean := True;
+   --  Every report below is written through Output; Success is threaded
+   --  through every call and, per VSS.Text_Streams's contract, latches
+   --  False on the first write failure and makes every later call a
+   --  no-op -- so it is set up once here and never inspected again.
+
+   Separator : constant VSS.Strings.Virtual_String :=
+     "--------------------------------------------------";
+
+   Scanning_Template :
+     constant VSS.Strings.Templates.Virtual_String_Template :=
+       "Scanning project: {1}";
+
+   Warning_Template : constant VSS.Strings.Templates.Virtual_String_Template :=
+     "warning: {1}";
+
+   Scan_Complete_Template :
+     constant VSS.Strings.Templates.Virtual_String_Template :=
+       "Scan complete. Found {1} {2}.";
+
+   function Pad_Right
+     (Text : VSS.Strings.Virtual_String; Width : VSS.Strings.Character_Count)
+      return VSS.Strings.Virtual_String;
+   --  Text, right-padded with spaces to Width characters; returned
+   --  unchanged when Text is already Width characters or longer. VSS's
+   --  string template placeholders carry no general column-width/
+   --  alignment support of their own (only a formatter-specific "format"
+   --  string, which VSS.Strings.Formatters.Strings ignores entirely), so
+   --  column alignment is done by pre-padding the value passed to the
+   --  template instead.
 
    function Priority_Image
-     (Value : Munin.Priorities.Optional_Priority) return String;
+     (Value : Munin.Priorities.Optional_Priority)
+      return VSS.Strings.Virtual_String;
+   --  "(Default)", or Value.Value formatted as a plain integer.
 
-   function Name_Column_Width
-     (Task_Items      : Munin.Tasks.Task_Unit_Array;
-      Protected_Items : Munin.Protected_Objects.Protected_Object_Array)
-      return Natural;
+   function Position_Suffix
+     (Position : Munin.Optional_Position) return VSS.Strings.Virtual_String;
+   --  " (file:line:column)", or an empty string when Position.Is_Set is
+   --  False.
 
    procedure Print_Priorities (Context : Munin.Contexts.Context);
    --  Print the "Discovered Concurrency Objects" report.
@@ -68,58 +105,55 @@ procedure Munin.CLI.Main is
    --  Munin.Call_Graph_Providers.Resolve, of every task and interrupt
    --  handler known to Context's Call_Graph_Provider.
 
-   function Pad_Right (Text : String; Width : Natural) return String is
+   function Pad_Right
+     (Text : VSS.Strings.Virtual_String; Width : VSS.Strings.Character_Count)
+      return VSS.Strings.Virtual_String
+   is
+      Result : VSS.Strings.Virtual_String := Text;
    begin
-      if Text'Length >= Width then
-         return Text;
+      if Text.Character_Length < Width then
+         Result.Append
+           ((Width - Text.Character_Length) * VSS.Characters.Latin.Space);
       end if;
 
-      return Text & (1 .. Width - Text'Length => ' ');
+      return Result;
    end Pad_Right;
 
    function Priority_Image
-     (Value : Munin.Priorities.Optional_Priority) return String is
+     (Value : Munin.Priorities.Optional_Priority)
+      return VSS.Strings.Virtual_String
+   is
+      Template : constant VSS.Strings.Templates.Virtual_String_Template :=
+        "{1}";
    begin
       if Value.Has_Value then
-         return Ada.Strings.Fixed.Trim (Value.Value'Image, Ada.Strings.Both);
+         return
+           Template.Format
+             (VSS.Strings.Formatters.Integers.Image (Value.Value));
       else
          return "(Default)";
       end if;
    end Priority_Image;
 
-   function Name_Column_Width
-     (Task_Items      : Munin.Tasks.Task_Unit_Array;
-      Protected_Items : Munin.Protected_Objects.Protected_Object_Array)
-      return Natural
+   function Position_Suffix
+     (Position : Munin.Optional_Position) return VSS.Strings.Virtual_String
    is
-      Result : Natural := 0;
+      Template : constant VSS.Strings.Templates.Virtual_String_Template :=
+        " ({1}:{2}:{3})";
    begin
-      for Item of Task_Items loop
-         declare
-            Name : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Tasks.Qualified_Name (Item));
-         begin
-            if Name'Length > Result then
-               Result := Name'Length;
-            end if;
-         end;
-      end loop;
+      if not Position.Is_Set then
+         return "";
+      end if;
 
-      for Item of Protected_Items loop
-         declare
-            Name : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Protected_Objects.Qualified_Name (Item));
-         begin
-            if Name'Length > Result then
-               Result := Name'Length;
-            end if;
-         end;
-      end loop;
-
-      return Result;
-   end Name_Column_Width;
+      return
+        Template.Format
+          (VSS.Strings.Formatters.Strings.Image
+             (VSS.Strings.Conversions.To_Virtual_String
+                (Ada.Directories.Simple_Name
+                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File)))),
+           VSS.Strings.Formatters.Integers.Image (Position.Line),
+           VSS.Strings.Formatters.Integers.Image (Position.Column));
+   end Position_Suffix;
 
    procedure Print_Priorities (Context : Munin.Contexts.Context) is
       Task_Items      : constant Munin.Tasks.Task_Unit_Array :=
@@ -127,52 +161,45 @@ procedure Munin.CLI.Main is
       Protected_Items :
         constant Munin.Protected_Objects.Protected_Object_Array :=
           Munin.Contexts.Protected_Objects (Context);
-      Name_Width      : constant Natural :=
-        Name_Column_Width (Task_Items, Protected_Items);
-      Label_Width     : constant Natural := 11;
-      Total           : constant Natural :=
-        Task_Items'Length + Protected_Items'Length;
+
+      Object_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template :=
+          "{1} {2}  Priority: {3}";
    begin
-      Ada.Text_IO.Put_Line ("Discovered Concurrency Objects:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Discovered Concurrency Objects:", Success);
+      Output.Put_Line (Separator, Success);
 
       for Item of Task_Items loop
-         declare
-            Name : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Tasks.Qualified_Name (Item));
-         begin
-            Ada.Text_IO.Put_Line
-              (Pad_Right ("[TASK]", Label_Width)
-               & " "
-               & Pad_Right (Name, Name_Width)
-               & "  Priority: "
-               & Priority_Image (Munin.Tasks.Priority (Item)));
-         end;
+         Output.Put_Line
+           (Object_Template.Format
+              (VSS.Strings.Formatters.Strings.Image (Pad_Right ("[TASK]", 11)),
+               VSS.Strings.Formatters.Strings.Image
+                 (Pad_Right (Munin.Tasks.Qualified_Name (Item), 24)),
+               VSS.Strings.Formatters.Strings.Image
+                 (Priority_Image (Munin.Tasks.Priority (Item)))),
+            Success);
       end loop;
 
       for Item of Protected_Items loop
-         declare
-            Name : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Protected_Objects.Qualified_Name (Item));
-         begin
-            Ada.Text_IO.Put_Line
-              (Pad_Right ("[PROTECTED]", Label_Width)
-               & " "
-               & Pad_Right (Name, Name_Width)
-               & "  Priority: "
-               & Priority_Image (Munin.Protected_Objects.Priority (Item)));
-         end;
+         Output.Put_Line
+           (Object_Template.Format
+              (VSS.Strings.Formatters.Strings.Image
+                 (Pad_Right ("[PROTECTED]", 11)),
+               VSS.Strings.Formatters.Strings.Image
+                 (Pad_Right
+                    (Munin.Protected_Objects.Qualified_Name (Item), 24)),
+               VSS.Strings.Formatters.Strings.Image
+                 (Priority_Image (Munin.Protected_Objects.Priority (Item)))),
+            Success);
       end loop;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
-      Ada.Text_IO.Put_Line
-        ("Scan complete. Found "
-         & Ada.Strings.Fixed.Trim (Total'Image, Ada.Strings.Both)
-         & " objects.");
+      Output.Put_Line (Separator, Success);
+      Output.Put_Line
+        (Scan_Complete_Template.Format
+           (VSS.Strings.Formatters.Integers.Image
+              (Task_Items'Length + Protected_Items'Length),
+            VSS.Strings.Formatters.Strings.Image ("objects")),
+         Success);
    end Print_Priorities;
 
    procedure Print_Call_Graph (Context : Munin.Contexts.Context) is
@@ -204,33 +231,21 @@ procedure Munin.CLI.Main is
            Provider.Image (Node);
          Qualified_Name : constant VSS.Strings.Virtual_String :=
            Provider.Qualified_Name (Node);
-         Name           : constant String :=
-           VSS.Strings.Conversions.To_UTF_8_String
-             (if Qualified_Name.Is_Empty then Image else Qualified_Name);
-         Position       : constant Munin.Optional_Position :=
-           Provider.Position (Node);
+         Name           : constant VSS.Strings.Virtual_String :=
+           (if Qualified_Name.Is_Empty then Image else Qualified_Name);
+         Indent         : constant String (1 .. Depth * 2) := [others => ' '];
       begin
-         Ada.Text_IO.Put ((1 .. Depth * 2 => ' ') & Name);
-
-         if Position.Is_Set then
-            Ada.Text_IO.Put
-              (" ("
-               & Ada.Directories.Simple_Name
-                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
-               & ":"
-               & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
-               & ":"
-               & Ada.Strings.Fixed.Trim
-                   (Position.Column'Image, Ada.Strings.Both)
-               & ")");
-         end if;
+         Output.Put
+           (VSS.Strings.Conversions.To_Virtual_String (Indent), Success);
+         Output.Put (Name, Success);
+         Output.Put (Position_Suffix (Provider.Position (Node)), Success);
 
          if Path.Contains (Image) then
-            Ada.Text_IO.Put_Line ("  (recursive call)");
+            Output.Put_Line ("  (recursive call)", Success);
             return;
          end if;
 
-         Ada.Text_IO.New_Line;
+         Output.New_Line (Success);
          Path.Insert (Image);
 
          for Callee of Provider.Callees (Node) loop
@@ -247,9 +262,8 @@ procedure Munin.CLI.Main is
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
-      Ada.Text_IO.Put_Line ("Call Graph:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Call Graph:", Success);
+      Output.Put_Line (Separator, Success);
 
       for Root of Provider.Tasks loop
          Print_Node (Root, 0, Path);
@@ -259,8 +273,7 @@ procedure Munin.CLI.Main is
          Print_Node (Root, 0, Path);
       end loop;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line (Separator, Success);
    end Print_Call_Graph;
 
    procedure Print_Cycles (Context : Munin.Contexts.Context) is
@@ -268,47 +281,34 @@ procedure Munin.CLI.Main is
         constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
           Munin.Contexts.Call_Graph (Context);
 
+      Cycle_Header_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template := "Cycle {1}:";
+
       procedure Print_Group
         (Group : Munin.Call_Graph_Cycles.Cycle_Group; Index : Positive);
 
       procedure Print_Group
         (Group : Munin.Call_Graph_Cycles.Cycle_Group; Index : Positive) is
       begin
-         Ada.Text_IO.Put_Line
-           ("Cycle "
-            & Ada.Strings.Fixed.Trim (Index'Image, Ada.Strings.Both)
-            & ":");
+         Output.Put_Line
+           (Cycle_Header_Template.Format
+              (VSS.Strings.Formatters.Integers.Image (Index)),
+            Success);
 
          for Node of Group loop
             declare
                Qualified_Name : constant VSS.Strings.Virtual_String :=
                  Provider.Qualified_Name (Node);
-               Name           : constant String :=
-                 VSS.Strings.Conversions.To_UTF_8_String
-                   (if Qualified_Name.Is_Empty
-                    then Provider.Image (Node)
-                    else Qualified_Name);
-               Position       : constant Munin.Optional_Position :=
-                 Provider.Position (Node);
+               Name           : constant VSS.Strings.Virtual_String :=
+                 (if Qualified_Name.Is_Empty
+                  then Provider.Image (Node)
+                  else Qualified_Name);
             begin
-               Ada.Text_IO.Put ("  " & Name);
-
-               if Position.Is_Set then
-                  Ada.Text_IO.Put
-                    (" ("
-                     & Ada.Directories.Simple_Name
-                         (VSS.Strings.Conversions.To_UTF_8_String
-                            (Position.File))
-                     & ":"
-                     & Ada.Strings.Fixed.Trim
-                         (Position.Line'Image, Ada.Strings.Both)
-                     & ":"
-                     & Ada.Strings.Fixed.Trim
-                         (Position.Column'Image, Ada.Strings.Both)
-                     & ")");
-               end if;
-
-               Ada.Text_IO.New_Line;
+               Output.Put ("  ", Success);
+               Output.Put (Name, Success);
+               Output.Put
+                 (Position_Suffix (Provider.Position (Node)), Success);
+               Output.New_Line (Success);
             end;
          end loop;
       end Print_Group;
@@ -322,20 +322,18 @@ procedure Munin.CLI.Main is
 
       Groups := Munin.Call_Graph_Cycles.Cycles (Provider.all);
 
-      Ada.Text_IO.Put_Line ("Cycles:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Cycles:", Success);
+      Output.Put_Line (Separator, Success);
 
       if Groups.Is_Empty then
-         Ada.Text_IO.Put_Line ("No cycles found.");
+         Output.Put_Line ("No cycles found.", Success);
       else
          for Index in 1 .. Groups.Last_Index loop
             Print_Group (Groups (Index), Index);
          end loop;
       end if;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line (Separator, Success);
    end Print_Cycles;
 
    procedure Print_Priority_Violations (Context : Munin.Contexts.Context) is
@@ -343,36 +341,25 @@ procedure Munin.CLI.Main is
         constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
           Munin.Contexts.Call_Graph (Context);
 
+      Violation_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template :=
+          "{1}  ceiling:{2}  reached at priority:{3}";
+
       procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node);
 
       procedure Print_Node (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
       is
          Qualified_Name : constant VSS.Strings.Virtual_String :=
            Provider.Qualified_Name (Node);
-         Name           : constant String :=
-           VSS.Strings.Conversions.To_UTF_8_String
-             (if Qualified_Name.Is_Empty
-              then Provider.Image (Node)
-              else Qualified_Name);
-         Position       : constant Munin.Optional_Position :=
-           Provider.Position (Node);
+         Name           : constant VSS.Strings.Virtual_String :=
+           (if Qualified_Name.Is_Empty
+            then Provider.Image (Node)
+            else Qualified_Name);
       begin
-         Ada.Text_IO.Put ("    " & Name);
-
-         if Position.Is_Set then
-            Ada.Text_IO.Put
-              (" ("
-               & Ada.Directories.Simple_Name
-                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
-               & ":"
-               & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
-               & ":"
-               & Ada.Strings.Fixed.Trim
-                   (Position.Column'Image, Ada.Strings.Both)
-               & ")");
-         end if;
-
-         Ada.Text_IO.New_Line;
+         Output.Put ("    ", Success);
+         Output.Put (Name, Success);
+         Output.Put (Position_Suffix (Provider.Position (Node)), Success);
+         Output.New_Line (Success);
       end Print_Node;
 
       Violations : Munin.Priority_Checks.Violation_List;
@@ -384,81 +371,67 @@ procedure Munin.CLI.Main is
 
       Violations := Munin.Priority_Checks.Check (Context, Provider.all);
 
-      Ada.Text_IO.Put_Line ("Priority-Ceiling Violations:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Priority-Ceiling Violations:", Success);
+      Output.Put_Line (Separator, Success);
 
       if Violations.Is_Empty then
-         Ada.Text_IO.Put_Line ("No priority-ceiling violations found.");
+         Output.Put_Line ("No priority-ceiling violations found.", Success);
       else
          for Item of Violations loop
-            Ada.Text_IO.Put_Line
-              (VSS.Strings.Conversions.To_UTF_8_String (Item.Object_Name)
-               & "  ceiling:"
-               & Item.Ceiling'Image
-               & "  reached at priority:"
-               & Item.Reached_At'Image);
+            Output.Put_Line
+              (Violation_Template.Format
+                 (VSS.Strings.Formatters.Strings.Image (Item.Object_Name),
+                  VSS.Strings.Formatters.Integers.Image (Item.Ceiling),
+                  VSS.Strings.Formatters.Integers.Image (Item.Reached_At)),
+               Success);
 
             for Node of Item.Path loop
                Print_Node (Node);
             end loop;
 
-            Ada.Text_IO.New_Line;
+            Output.New_Line (Success);
          end loop;
       end if;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line (Separator, Success);
    end Print_Priority_Violations;
 
    procedure Print_Interrupts (Context : Munin.Contexts.Context) is
       Handler_Items :
         constant Munin.Interrupt_Handlers.Interrupt_Handler_Array :=
           Munin.Contexts.Interrupt_Handlers (Context);
-      Name_Width    : Natural := 0;
+
+      Handler_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template :=
+          "{1}  Protected Object: {2}  Priority: {3}";
    begin
-      for Item of Handler_Items loop
-         declare
-            Name : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Interrupt_Handlers.Qualified_Name (Item));
-         begin
-            if Name'Length > Name_Width then
-               Name_Width := Name'Length;
-            end if;
-         end;
-      end loop;
-
-      Ada.Text_IO.Put_Line ("Interrupt Handlers:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Interrupt Handlers:", Success);
+      Output.Put_Line (Separator, Success);
 
       for Item of Handler_Items loop
          declare
-            Name    : constant String :=
-              VSS.Strings.Conversions.To_UTF_8_String
-                (Munin.Interrupt_Handlers.Qualified_Name (Item));
             Owner   : constant VSS.Strings.Virtual_String :=
               Munin.Interrupt_Handlers.Protected_Object (Item);
             Ceiling : constant Munin.Priorities.Priority_Value :=
               Munin.Contexts.Protected_Object_Ceiling (Context, Owner);
          begin
-            Ada.Text_IO.Put_Line
-              (Pad_Right (Name, Name_Width)
-               & "  Protected Object: "
-               & VSS.Strings.Conversions.To_UTF_8_String (Owner)
-               & "  Priority: "
-               & Ada.Strings.Fixed.Trim (Ceiling'Image, Ada.Strings.Both));
+            Output.Put_Line
+              (Handler_Template.Format
+                 (VSS.Strings.Formatters.Strings.Image
+                    (Pad_Right
+                       (Munin.Interrupt_Handlers.Qualified_Name (Item), 24)),
+                  VSS.Strings.Formatters.Strings.Image (Owner),
+                  VSS.Strings.Formatters.Integers.Image (Ceiling)),
+               Success);
          end;
       end loop;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
-      Ada.Text_IO.Put_Line
-        ("Scan complete. Found "
-         & Ada.Strings.Fixed.Trim
-             (Handler_Items'Length'Image, Ada.Strings.Both)
-         & " interrupt handlers.");
+      Output.Put_Line (Separator, Success);
+      Output.Put_Line
+        (Scan_Complete_Template.Format
+           (VSS.Strings.Formatters.Integers.Image (Handler_Items'Length),
+            VSS.Strings.Formatters.Strings.Image ("interrupt handlers")),
+         Success);
    end Print_Interrupts;
 
    procedure Print_Lock_Violations (Context : Munin.Contexts.Context) is
@@ -472,30 +445,15 @@ procedure Munin.CLI.Main is
       is
          Qualified_Name : constant VSS.Strings.Virtual_String :=
            Provider.Qualified_Name (Node);
-         Name           : constant String :=
-           VSS.Strings.Conversions.To_UTF_8_String
-             (if Qualified_Name.Is_Empty
-              then Provider.Image (Node)
-              else Qualified_Name);
-         Position       : constant Munin.Optional_Position :=
-           Provider.Position (Node);
+         Name           : constant VSS.Strings.Virtual_String :=
+           (if Qualified_Name.Is_Empty
+            then Provider.Image (Node)
+            else Qualified_Name);
       begin
-         Ada.Text_IO.Put ("    " & Name);
-
-         if Position.Is_Set then
-            Ada.Text_IO.Put
-              (" ("
-               & Ada.Directories.Simple_Name
-                   (VSS.Strings.Conversions.To_UTF_8_String (Position.File))
-               & ":"
-               & Ada.Strings.Fixed.Trim (Position.Line'Image, Ada.Strings.Both)
-               & ":"
-               & Ada.Strings.Fixed.Trim
-                   (Position.Column'Image, Ada.Strings.Both)
-               & ")");
-         end if;
-
-         Ada.Text_IO.New_Line;
+         Output.Put ("    ", Success);
+         Output.Put (Name, Success);
+         Output.Put (Position_Suffix (Provider.Position (Node)), Success);
+         Output.New_Line (Success);
       end Print_Node;
 
       Violations : Munin.Lock_Checks.Violation_List;
@@ -507,28 +465,26 @@ procedure Munin.CLI.Main is
 
       Violations := Munin.Lock_Checks.Check (Provider.all);
 
-      Ada.Text_IO.Put_Line ("Protected-Object Re-Entries:");
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line ("Protected-Object Re-Entries:", Success);
+      Output.Put_Line (Separator, Success);
 
       if Violations.Is_Empty then
-         Ada.Text_IO.Put_Line ("No protected-object re-entries found.");
+         Output.Put_Line ("No protected-object re-entries found.", Success);
       else
          for Item of Violations loop
-            Ada.Text_IO.Put_Line
-              (VSS.Strings.Conversions.To_UTF_8_String (Item.Object_Name)
-               & "  called back into while already locked");
+            Output.Put (Item.Object_Name, Success);
+            Output.Put_Line
+              ("  called back into while already locked", Success);
 
             for Node of Item.Path loop
                Print_Node (Node);
             end loop;
 
-            Ada.Text_IO.New_Line;
+            Output.New_Line (Success);
          end loop;
       end if;
 
-      Ada.Text_IO.Put_Line
-        ("--------------------------------------------------");
+      Output.Put_Line (Separator, Success);
    end Print_Lock_Violations;
 
    procedure Print_Stack_Usage (Context : Munin.Contexts.Context) is
@@ -536,64 +492,77 @@ procedure Munin.CLI.Main is
         constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
           Munin.Contexts.Call_Graph (Context);
 
-      function Node_Name
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node) return String;
+      Root_Template : constant VSS.Strings.Templates.Virtual_String_Template :=
+        "{1} {2}  Stack: {3} bytes";
+
+      Cycle_Note : constant VSS.Strings.Virtual_String :=
+        "  [call cycle: lower bound only]";
+
+      Indirect_Note_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template :=
+          "  [indirect calls: {1}]";
+
+      Dynamic_Note_Template :
+        constant VSS.Strings.Templates.Virtual_String_Template :=
+          "  [dynamic allocations: {1}]";
 
       function Node_Name
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node) return String
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+         return VSS.Strings.Virtual_String;
+
+      function Node_Name
+        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+         return VSS.Strings.Virtual_String
       is
          Qualified_Name : constant VSS.Strings.Virtual_String :=
            Provider.Qualified_Name (Node);
       begin
          return
-           VSS.Strings.Conversions.To_UTF_8_String
-             (if Qualified_Name.Is_Empty
-              then Provider.Image (Node)
-              else Qualified_Name);
+           (if Qualified_Name.Is_Empty
+            then Provider.Image (Node)
+            else Qualified_Name);
       end Node_Name;
 
       procedure Print_Root
-        (Node       : Munin.Call_Graph_Providers.Call_Graph_Node;
-         Label      : String;
-         Name_Width : Natural);
+        (Node  : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Label : VSS.Strings.Virtual_String);
 
       procedure Print_Root
-        (Node       : Munin.Call_Graph_Providers.Call_Graph_Node;
-         Label      : String;
-         Name_Width : Natural)
+        (Node  : Munin.Call_Graph_Providers.Call_Graph_Node;
+         Label : VSS.Strings.Virtual_String)
       is
          Usage : constant Munin.Call_Graph_Providers.Stack_Usage :=
            Provider.Resolve (Node);
       begin
-         Ada.Text_IO.Put
-           (Pad_Right (Label, 13)
-            & " "
-            & Pad_Right (Node_Name (Node), Name_Width)
-            & "  Stack: "
-            & Ada.Strings.Fixed.Trim (Usage.Stack_Used'Image, Ada.Strings.Both)
-            & " bytes");
+         Output.Put
+           (Root_Template.Format
+              (VSS.Strings.Formatters.Strings.Image (Pad_Right (Label, 11)),
+               VSS.Strings.Formatters.Strings.Image
+                 (Pad_Right (Node_Name (Node), 24)),
+               VSS.Strings.Formatters.Integers.Image (Usage.Stack_Used)),
+            Success);
 
          if Usage.Cycle then
-            Ada.Text_IO.Put ("  [call cycle: lower bound only]");
+            Output.Put (Cycle_Note, Success);
          end if;
 
          if Usage.Indirect_Calls > 0 then
-            Ada.Text_IO.Put
-              ("  [indirect calls: "
-               & Ada.Strings.Fixed.Trim
-                   (Usage.Indirect_Calls'Image, Ada.Strings.Both)
-               & "]");
+            Output.Put
+              (Indirect_Note_Template.Format
+                 (VSS.Strings.Formatters.Integers.Image
+                    (Usage.Indirect_Calls)),
+               Success);
          end if;
 
          if Usage.Dynamic_Objects > 0 then
-            Ada.Text_IO.Put
-              ("  [dynamic allocations: "
-               & Ada.Strings.Fixed.Trim
-                   (Usage.Dynamic_Objects'Image, Ada.Strings.Both)
-               & "]");
+            Output.Put
+              (Dynamic_Note_Template.Format
+                 (VSS.Strings.Formatters.Integers.Image
+                    (Usage.Dynamic_Objects)),
+               Success);
          end if;
 
-         Ada.Text_IO.New_Line;
+         Output.New_Line (Success);
       end Print_Root;
 
    begin
@@ -602,54 +571,35 @@ procedure Munin.CLI.Main is
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
-      declare
-         Task_Items    :
-           constant Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
-             Provider.Tasks;
-         Handler_Items :
-           constant Munin.Call_Graph_Providers.Call_Graph_Node_Array :=
-             Provider.Interrupt_Handlers;
-         Name_Width    : Natural := 0;
-      begin
-         for Node of Task_Items loop
-            Name_Width := Natural'Max (Name_Width, Node_Name (Node)'Length);
-         end loop;
+      Output.Put_Line ("Worst-Case Stack Usage:", Success);
+      Output.Put_Line (Separator, Success);
 
-         for Node of Handler_Items loop
-            Name_Width := Natural'Max (Name_Width, Node_Name (Node)'Length);
-         end loop;
+      for Node of Provider.Tasks loop
+         Print_Root (Node, "[TASK]");
+      end loop;
 
-         Ada.Text_IO.Put_Line ("Worst-Case Stack Usage:");
-         Ada.Text_IO.Put_Line
-           ("--------------------------------------------------");
+      for Node of Provider.Interrupt_Handlers loop
+         Print_Root (Node, "[INTERRUPT]");
+      end loop;
 
-         for Node of Task_Items loop
-            Print_Root (Node, "[TASK]", Name_Width);
-         end loop;
-
-         for Node of Handler_Items loop
-            Print_Root (Node, "[INTERRUPT]", Name_Width);
-         end loop;
-
-         Ada.Text_IO.Put_Line
-           ("--------------------------------------------------");
-         Ada.Text_IO.Put_Line
-           ("Scan complete. Found "
-            & Ada.Strings.Fixed.Trim
-                (Natural'(Task_Items'Length + Handler_Items'Length)'Image,
-                 Ada.Strings.Both)
-            & " roots.");
-      end;
+      Output.Put_Line (Separator, Success);
+      Output.Put_Line
+        (Scan_Complete_Template.Format
+           (VSS.Strings.Formatters.Integers.Image
+              (Provider.Tasks'Length + Provider.Interrupt_Handlers'Length),
+            VSS.Strings.Formatters.Strings.Image ("roots")),
+         Success);
    end Print_Stack_Usage;
 
    Command : constant Munin.CLI.Command_Line.Command :=
      Munin.CLI.Command_Line.Parse;
 
 begin
-   Ada.Text_IO.Put_Line
-     ("Scanning project: "
-      & VSS.Strings.Conversions.To_UTF_8_String (Command.Project_File));
-   Ada.Text_IO.New_Line;
+   Output.Put_Line
+     (Scanning_Template.Format
+        (VSS.Strings.Formatters.Strings.Image (Command.Project_File)),
+      Success);
+   Output.New_Line (Success);
 
    declare
       Context  : Munin.Contexts.Context;
@@ -667,8 +617,10 @@ begin
       end if;
 
       for Item of Warnings loop
-         Ada.Text_IO.Put_Line
-           ("warning: " & VSS.Strings.Conversions.To_UTF_8_String (Item));
+         Output.Put_Line
+           (Warning_Template.Format
+              (VSS.Strings.Formatters.Strings.Image (Item)),
+            Success);
       end loop;
 
       case Command.Subject is
