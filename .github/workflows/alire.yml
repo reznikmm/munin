@@ -18,7 +18,7 @@ jobs:
       run: alr build
     - uses: actions/upload-artifact@v7
       with:
-        name: munin-linux-x86_64
+        name: ci-munin-linux-x86_64
         path: bin/munin
     - name: Build project and run tests
       run: alr test
@@ -50,19 +50,19 @@ jobs:
         include:
         - os: ubuntu-latest
           asset: munin-linux-x86_64
-          exe: munin
+
         - os: ubuntu-24.04-arm
           asset: munin-linux-arm64
-          exe: munin
+
         - os: macos-latest
           asset: munin-macos-arm64
-          exe: munin
+
         - os: macos-26-intel
           asset: munin-macos-x86_64
-          exe: munin
+
         - os: windows-latest
           asset: munin-windows-x86_64.exe
-          exe: munin.exe
+
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v6
@@ -79,13 +79,21 @@ jobs:
       run: alr settings --global --set dependencies.shared false
     - name: Build project
       run: alr build --release
-    - name: Rename binary
+    - name: Package (Linux)
       shell: bash
-      run: cp bin/${{ matrix.exe }} ${{ matrix.asset }}
+      if: ${{ runner.os != 'Windows' }}
+      run: tar czf ${{ matrix.asset }}.tar.gz -C bin munin
+    - name: Package (Windows)
+      shell: pwsh
+      if: ${{ runner.os == 'Windows' }}
+      run: Compress-Archive -Path bin\munin.exe -DestinationPath ${{ matrix.asset }}.zip
     - uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.asset }}
-        path: ${{ matrix.asset }}
+        if-no-files-found: error
+        path:  |
+         ${{ matrix.asset }}.tar.gz
+         ${{ matrix.asset }}.zip
 
   release:
     needs: [check-tag, build]
