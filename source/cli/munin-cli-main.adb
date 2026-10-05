@@ -4,6 +4,7 @@
 ------------------------------------------------------------------
 
 with Munin.CLI.Command_Line;
+with Munin.CLI.Errors;
 with Munin.Call_Graph_Cycles;
 with Munin.Call_Graph_Providers;
 with Munin.Contexts;
@@ -14,11 +15,11 @@ with Munin.Priority_Checks;
 with Munin.Protected_Objects;
 with Munin.Tasks;
 
+with Ada.Command_Line;
 with Ada.Containers.Hashed_Sets;
 with Ada.Directories;
 
 with VSS.Characters.Latin;
-with VSS.Command_Line;
 with VSS.String_Vectors;
 with VSS.Strings;
 with VSS.Strings.Conversions;
@@ -40,7 +41,11 @@ procedure Munin.CLI.Main is
    --  Every report below is written through Output; Success is threaded
    --  through every call and, per VSS.Text_Streams's contract, latches
    --  False on the first write failure and makes every later call a
-   --  no-op -- so it is set up once here and never inspected again.
+   --  no-op. It is inspected once, at the end of Main.
+
+   Violations_Found : Boolean := False;
+   --  Set by the check reporters; mapped to exit status 1 at the end of
+   --  Main.
 
    Separator : constant VSS.Strings.Virtual_String :=
      "--------------------------------------------------";
@@ -258,7 +263,7 @@ procedure Munin.CLI.Main is
       Path : Symbol_Sets.Set;
    begin
       if Provider = null then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
@@ -316,7 +321,7 @@ procedure Munin.CLI.Main is
       Groups : Munin.Call_Graph_Cycles.Cycle_Groups;
    begin
       if Provider = null then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
@@ -365,11 +370,13 @@ procedure Munin.CLI.Main is
       Violations : Munin.Priority_Checks.Violation_List;
    begin
       if Provider = null then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
       Violations := Munin.Priority_Checks.Check (Context, Provider.all);
+
+      Violations_Found := not Violations.Is_Empty;
 
       Output.Put_Line ("Priority-Ceiling Violations:", Success);
       Output.Put_Line (Separator, Success);
@@ -459,11 +466,13 @@ procedure Munin.CLI.Main is
       Violations : Munin.Lock_Checks.Violation_List;
    begin
       if Provider = null then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
       Violations := Munin.Lock_Checks.Check (Provider.all);
+
+      Violations_Found := not Violations.Is_Empty;
 
       Output.Put_Line ("Protected-Object Re-Entries:", Success);
       Output.Put_Line (Separator, Success);
@@ -567,7 +576,7 @@ procedure Munin.CLI.Main is
 
    begin
       if Provider = null then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
 
@@ -613,7 +622,7 @@ begin
          Warnings     => Warnings);
 
       if not Errors.Is_Empty then
-         VSS.Command_Line.Report_Error (Errors);
+         Munin.CLI.Errors.Report_Error (Errors);
       end if;
 
       for Item of Warnings loop
@@ -646,4 +655,11 @@ begin
             Print_Lock_Violations (Context);
       end case;
    end;
+
+   Ada.Command_Line.Set_Exit_Status
+     (if not Success
+      then Munin.CLI.Errors.Failure_Status
+      elsif Violations_Found
+      then 1
+      else Ada.Command_Line.Success);
 end Munin.CLI.Main;
