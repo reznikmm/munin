@@ -20,8 +20,8 @@ package body Munin.Priority_Checks is
    --  runtime's priority range, so the algorithm always terminates.
 
    function Check
-     (Context  : Munin.Contexts.Context;
-      Provider : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
+     (Priorities : Munin.Priority_Sources.Priority_Source'Class;
+      Provider   : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
       return Violation_List
    is
       Best        : Priority_Maps.Map;
@@ -50,13 +50,13 @@ package body Munin.Priority_Checks is
 
    begin
       for Root of Provider.Tasks loop
-         Seed_Root (Root, Context.Task_Priority (Provider.Position (Root)));
+         Seed_Root (Root, Priorities.Task_Priority (Provider.Position (Root)));
       end loop;
 
       for Root of Provider.Interrupt_Handlers loop
          Seed_Root
            (Root,
-            Context.Interrupt_Handler_Priority (Provider.Position (Root)));
+            Priorities.Interrupt_Handler_Priority (Provider.Position (Root)));
       end loop;
 
       while not Worklist.Is_Empty loop
@@ -73,7 +73,7 @@ package body Munin.Priority_Checks is
                Propagated :=
                  Munin.Priorities.Priority_Value'Max
                    (Active,
-                    Context.Protected_Object_Ceiling
+                    Priorities.Protected_Object_Ceiling
                       (Provider.Protected_Object_Name (Node)));
             end if;
 
@@ -99,7 +99,7 @@ package body Munin.Priority_Checks is
                      Object_Name : constant VSS.Strings.Virtual_String :=
                        Provider.Protected_Object_Name (Node);
                      Ceiling     : constant Munin.Priorities.Priority_Value :=
-                       Context.Protected_Object_Ceiling (Object_Name);
+                       Priorities.Protected_Object_Ceiling (Object_Name);
                      Reached_At  : constant Munin.Priorities.Priority_Value :=
                        Priority_Maps.Element (Cursor);
                   begin

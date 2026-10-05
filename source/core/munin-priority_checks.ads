@@ -17,8 +17,8 @@ with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.Containers;
-with Munin.Contexts;
 with Munin.Priorities;
+with Munin.Priority_Sources;
 
 package Munin.Priority_Checks is
 
@@ -51,8 +51,8 @@ package Munin.Priority_Checks is
    subtype Violation_List is Violation_Vectors.Vector;
 
    function Check
-     (Context  : Munin.Contexts.Context;
-      Provider : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
+     (Priorities : Munin.Priority_Sources.Priority_Source'Class;
+      Provider   : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
       return Violation_List;
    --  Every priority-ceiling-locking violation reachable from Provider's
    --  Tasks or Interrupt_Handlers, one per violating call site (regardless

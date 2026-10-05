@@ -16,13 +16,15 @@ with Munin.Call_Graph_Providers;
 with Munin.Entry_Calls;
 with Munin.Interrupt_Handlers;
 with Munin.Priorities;
+with Munin.Priority_Sources;
 with Munin.Protected_Objects;
 with Munin.Protected_Operations;
 with Munin.Tasks;
 
 package Munin.Contexts is
 
-   type Context is tagged limited private;
+   type Context is limited
+     new Munin.Priority_Sources.Priority_Source with private;
 
    procedure Load_Project
      (Self         : in out Context;
@@ -79,6 +81,7 @@ package Munin.Contexts is
    --  Priority/Interrupt_Priority aspect. Meaningful only after a
    --  successful Load_Project.
 
+   overriding
    function Task_Priority
      (Self : Context; Task_Position : Munin.Optional_Position)
       return Munin.Priorities.Priority_Value;
@@ -89,6 +92,7 @@ package Munin.Contexts is
    --  generated code, not any Munin.Tasks.Task_Unit's own), or when
    --  Task_Position itself is unset.
 
+   overriding
    function Interrupt_Handler_Priority
      (Self : Context; Handler_Position : Munin.Optional_Position)
       return Munin.Priorities.Priority_Value;
@@ -99,6 +103,7 @@ package Munin.Contexts is
    --  Handler_Position matches no interrupt handler known to Self, or is
    --  itself unset.
 
+   overriding
    function Protected_Object_Ceiling
      (Self : Context; Qualified_Name : VSS.Strings.Virtual_String)
       return Munin.Priorities.Priority_Value;
@@ -134,7 +139,8 @@ private
    --  (rebuilt by iterating the map) stays deterministic -- alphabetical
    --  by qualified name.
 
-   type Context is tagged limited record
+   type Context is limited new Munin.Priority_Sources.Priority_Source
+   with record
       Loaded_Project          : VSS.Strings.Virtual_String :=
         VSS.Strings.Empty_Virtual_String;
       Project_Tree            : GPR2.Project.Tree.Object;
