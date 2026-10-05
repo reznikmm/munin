@@ -13,6 +13,7 @@ with Munin.Lock_Checks;
 with Munin.Priorities;
 with Munin.Priority_Checks;
 with Munin.Protected_Objects;
+with Munin.Stack_Analysis;
 with Munin.Tasks;
 
 with Ada.Command_Line;
@@ -107,7 +108,7 @@ procedure Munin.CLI.Main is
 
    procedure Print_Stack_Usage (Context : Munin.Contexts.Context);
    --  Print the worst-case stack usage, computed by
-   --  Munin.Call_Graph_Providers.Resolve, of every task and interrupt
+   --  Munin.Stack_Analysis.Usage, of every task and interrupt
    --  handler known to Context's Call_Graph_Provider.
 
    function Pad_Right
@@ -501,6 +502,8 @@ procedure Munin.CLI.Main is
         constant Munin.Call_Graph_Providers.Call_Graph_Provider_Access :=
           Munin.Contexts.Call_Graph (Context);
 
+      Stack_Analysis : Munin.Stack_Analysis.Analysis;
+
       Root_Template : constant VSS.Strings.Templates.Virtual_String_Template :=
         "{1} {2}  Stack: {3} bytes";
 
@@ -540,8 +543,8 @@ procedure Munin.CLI.Main is
         (Node  : Munin.Call_Graph_Providers.Call_Graph_Node;
          Label : VSS.Strings.Virtual_String)
       is
-         Usage : constant Munin.Call_Graph_Providers.Stack_Usage :=
-           Provider.Resolve (Node);
+         Usage : constant Munin.Stack_Analysis.Stack_Usage :=
+           Stack_Analysis.Usage (Provider.all, Node);
       begin
          Output.Put
            (Root_Template.Format
@@ -579,6 +582,8 @@ procedure Munin.CLI.Main is
          Munin.CLI.Errors.Report_Error
            (Munin.Contexts.Call_Graph_Error (Context));
       end if;
+
+      Stack_Analysis.Initialize (Provider.all);
 
       Output.Put_Line ("Worst-Case Stack Usage:", Success);
       Output.Put_Line (Separator, Success);

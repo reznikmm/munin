@@ -158,20 +158,42 @@ package Munin.Call_Graph_Providers.CI_Databases is
      (Self   : in out Database;
       Caller : VSS.String_Vectors.Virtual_String_Vector;
       Target : VSS.Strings.Virtual_String);
-   --  Record a known target for an indirect call, identified by the chain
-   --  of calling symbols that leads to it (innermost last); an empty but
-   --  non-null Target means the call is known to never execute. Consulted
-   --  by Resolve when it reaches an unresolved indirect call.
+   --  Record a known target for an indirect call made by the last symbol of
+   --  Caller; an empty but non-null Target means the call is known to never
+   --  execute. Call after Complete: the call through a pointer in the
+   --  graph is rewritten once, here, into a dedicated node for that caller
+   --  (no longer Is_Indirect_Call) whose callees are the recorded targets,
+   --  all of them when more than one was recorded for the same caller.
+   --
+   --  Only the immediate caller (the last symbol of Caller) is matched: the
+   --  rest of the chain is ignored, so targets recorded for different
+   --  chains ending at the same symbol are merged. Does nothing when the
+   --  caller makes no indirect call.
 
-   subtype Resolve_Result is Munin.Call_Graph_Providers.Stack_Usage;
+   function Own_Stack
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural;
+   --  Node's own static stack; 0 for a node not described by any loaded
+   --  `.ci` file (external reference, or unknown).
 
-   function Resolve
-     (Self : in out Database;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node) return Resolve_Result;
-   --  Worst-case stack usage rooted at Node: its own static stack plus the
-   --  maximum over all of its (recursively resolved) callees. Cycle is
-   --  set when Node's call graph is (or reaches) a recursive cycle, in
-   --  which case Stack_Used is a lower bound, not the true worst case.
+   function Dynamic_Objects
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural;
+   --  Node's own dynamic allocations; 0 when it is not described by any
+   --  loaded `.ci` file.
+
+   function Is_Known
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+   --  True for every node recorded in Self.Sources, internal or external.
+   --  A node synthesized for a protected object (see
+   --  Is_Protected_Operation) is not recorded there, hence not known.
+
+   function Is_Indirect_Call
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+   --  True for exactly the placeholder Complete registered for a call
+   --  through a pointer.
 
 private
 
@@ -179,9 +201,6 @@ private
 
    type Node_Record is record
       Node : Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node;
-
-      Result     : Resolve_Result;
-      Calculated : Boolean := False;
    end record;
 
    package Node_Maps is new
@@ -222,22 +241,6 @@ private
    package Top_Entry_Lists is new
      Ada.Containers.Doubly_Linked_Lists (Top_Entry);
 
-   type Indirect_Call_Target is record
-      Caller : VSS.String_Vectors.Virtual_String_Vector;
-      Target : VSS.Strings.Virtual_String;
-   end record;
-
-   package ICT_Lists is new
-     Ada.Containers.Doubly_Linked_Lists (Indirect_Call_Target);
-
-   package ICT_Maps is new
-     Ada.Containers.Hashed_Maps
-       (Key_Type        => VSS.Strings.Virtual_String,
-        Element_Type    => ICT_Lists.List,
-        Hash            => VSS.Strings.Hash,
-        Equivalent_Keys => VSS.Strings."=",
-        "="             => ICT_Lists."=");
-
    --  Node identity: every symbol seen (as a node's own symbol, or as an
    --  edge endpoint) gets a stable Positive index the first time it's
    --  seen, and Call_Graph_Node is that index -- new relative to the
@@ -277,10 +280,6 @@ private
       --  Reverse call edges: {callee symbol -> {caller symbols}}. Built by
       --  Complete; new relative to the ported original, which never
       --  needed to walk edges backwards.
-
-      ICT : ICT_Maps.Map;
-      --  Indirect call targets, grouped by the last (innermost) symbol in
-      --  their calling chain.
 
       Top : Top_Entry_Lists.List;
       --  Top-level entries (task bodies, main subprogram, ...) with a

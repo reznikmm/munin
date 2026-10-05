@@ -114,26 +114,30 @@ package Munin.Call_Graph_Providers is
    --  Hash for Node, so it can be used as the key of an
    --  Ada.Containers.Hashed_Maps.Map or Hashed_Sets.Set.
 
-   type Stack_Usage is record
-      Stack_Used      : Natural := 0;
-      Indirect_Calls  : Natural := 0;
-      Dynamic_Objects : Natural := 0;
-      Cycle           : Boolean := False;
-   end record;
-   --  Stack_Used is Node's own static stack plus the maximum over all of
-   --  its (recursively resolved) callees; Indirect_Calls/Dynamic_Objects
-   --  count, respectively, calls through a pointer and heap/secondary
-   --  stack allocations reachable from Node -- neither contributes to
-   --  Stack_Used, so a nonzero count means the true worst case may be
-   --  higher than reported. Cycle is set when Node's call graph is (or
-   --  reaches) a recursive cycle, in which case Stack_Used is a lower
-   --  bound, not the true worst case.
-
-   function Resolve
-     (Self : in out Call_Graph_Provider; Node : Call_Graph_Node)
-      return Stack_Usage
+   function Own_Stack
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Natural
    is abstract;
-   --  Worst-case stack usage rooted at Node; see Stack_Usage.
+   --  Static stack used by Node's own frame, as reported by the backend; 0
+   --  when unknown (see Is_Known).
+
+   function Dynamic_Objects
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Natural
+   is abstract;
+   --  Number of dynamic (heap/secondary-stack) allocations in Node's own
+   --  body; 0 when unknown (see Is_Known).
+
+   function Is_Known
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
+   is abstract;
+   --  False when Self has no record of Node at all, so nothing (neither its
+   --  own stack nor its callees) is known about it. True otherwise, even
+   --  for a node that is only an external reference (Own_Stack is then 0).
+
+   function Is_Indirect_Call
+     (Self : Call_Graph_Provider; Node : Call_Graph_Node) return Boolean
+   is abstract;
+   --  True for the synthetic node representing a call through a pointer
+   --  whose target is not known.
 
 private
 

@@ -7,10 +7,10 @@ with GPR2.Options;
 with GPR2.Project.Tree;
 with Munin.Call_Graph_Providers;
 with Munin.Call_Graph_Providers.CI;
-with Munin.Call_Graph_Providers.CI_Databases;
 with Munin.Entry_Calls;
 with Munin.Interrupt_Handlers;
 with Munin.Protected_Operations;
+with Munin.Stack_Analysis;
 with Test_Build_Support;
 with Test_Call_Graph_Support;
 with Trendy_Test.Assertions;
@@ -100,15 +100,14 @@ package body Test_Call_Graph_Cycle is
                = "Proc_A");
             Op.Assert (Provider.Position (Proc_A).Is_Set);
 
-            --  Resolve (dormant future-feature machinery) must terminate
-            --  on the Proc_A/Proc_B cycle and flag it as such.
+            --  Stack analysis must terminate on the Proc_A/Proc_B cycle and
+            --  flag it as such.
             declare
-               Usage :
-                 constant Munin
-                            .Call_Graph_Providers
-                            .CI_Databases
-                            .Resolve_Result := Provider.Resolve (Proc_A);
+               Analysis : Munin.Stack_Analysis.Analysis;
+               Usage    : Munin.Stack_Analysis.Stack_Usage;
             begin
+               Analysis.Initialize (Provider);
+               Usage := Analysis.Usage (Provider, Proc_A);
                Op.Assert (Usage.Cycle);
                Op.Assert (Usage.Stack_Used > 0);
             end;

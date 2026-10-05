@@ -21,12 +21,6 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    --  both the native runtime and the Ravenscar/Jorvik cross runtime
    --  Munin targets (`light_tasking_rp2040`).
 
-   function "+" (Left, Right : Resolve_Result) return Resolve_Result
-   is (Natural'Max (Left.Stack_Used, Right.Stack_Used),
-       Left.Indirect_Calls + Right.Indirect_Calls,
-       Left.Dynamic_Objects + Right.Dynamic_Objects,
-       Boolean'Max (Left.Cycle, Right.Cycle));
-
    function Static_Stack_Of
      (Node : Munin.Call_Graph_Providers.CI_Compilation_Units.Subprogram_Node)
       return Natural
@@ -74,30 +68,6 @@ package body Munin.Call_Graph_Providers.CI_Databases is
    --  site to a specific protected object, in which case its one real
    --  outgoing edge -- the original target -- is returned instead.
 
-   function Known_Indirect_Call
-     (Self : Database; Trace : VSS.String_Vectors.Virtual_String_Vector)
-      return VSS.Strings.Virtual_String;
-   --  The known target for an indirect call reached through the given
-   --  calling chain (innermost last), an empty (but non-null) string when
-   --  that call is known to never execute, or a null string when no
-   --  override was given for it at all.
-
-   function In_Progress
-     (Trace : VSS.String_Vectors.Virtual_String_Vector;
-      Name  : VSS.Strings.Virtual_String) return Boolean;
-   --  True when Name is already on Trace, i.e. Resolve is in the middle
-   --  of computing Name's own result and has recursed back into it: a
-   --  call cycle. Checking this directly (rather than relying on the
-   --  Calculated flag, which can't tell "still being computed" apart
-   --  from "computed and cached") is what lets Resolve detect and flag
-   --  cycles without a separate pre-pass over the whole graph.
-
-   function Resolve
-     (Self  : in out Database;
-      Name  : VSS.Strings.Virtual_String;
-      Trace : VSS.String_Vectors.Virtual_String_Vector) return Resolve_Result;
-   --  Symbol-keyed worker behind the public, Node-keyed Resolve.
-
    --------------
    -- Add_Entry --
    --------------
@@ -120,12 +90,47 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       Target : VSS.Strings.Virtual_String)
    is
       Last : constant VSS.Strings.Virtual_String := Caller.Last_Element;
+      Site : constant VSS.Strings.Virtual_String := Indirect_Call & "/" & Last;
+      --  The node dedicated to the call through a pointer made by Last.
    begin
-      if not Self.ICT.Contains (Last) then
-         Self.ICT.Insert (Last, ICT_Lists.Empty);
+      if not Self.Edges.Contains (Last)
+        or else not (Self.Edges (Last).Contains (Indirect_Call)
+                     or else Self.Edges (Last).Contains (Site))
+      then
+         return;
       end if;
 
-      Self.ICT (Last).Append ((Caller, Target));
+      if not Self.Edges.Contains (Site) then
+         Self.Register (Site);
+         Self.Sources.Insert
+           (Site,
+            (Node =>
+               (Is_External => True,
+                Title       => Site,
+                Symbol      => Site,
+                Source      => VSS.Strings.Empty_Virtual_String,
+                Name        => VSS.Strings.Empty_Virtual_String)));
+         Self.Edges.Insert (Site, String_Sets.Empty_Set);
+         Self.Edges (Last).Exclude (Indirect_Call);
+         Self.Edges (Last).Include (Site);
+
+         if Self.Reverse_Edges.Contains (Indirect_Call) then
+            Self.Reverse_Edges (Indirect_Call).Exclude (Last);
+         end if;
+
+         Self.Reverse_Edges.Insert (Site, [Last]);
+      end if;
+
+      if not Target.Is_Empty then
+         Self.Register (Target);
+         Self.Edges (Site).Include (Target);
+
+         if not Self.Reverse_Edges.Contains (Target) then
+            Self.Reverse_Edges.Insert (Target, String_Sets.Empty_Set);
+         end if;
+
+         Self.Reverse_Edges (Target).Include (Site);
+      end if;
    end Add_Indirect_Call_Target;
 
    -------------
@@ -410,21 +415,17 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       end loop;
 
       --  Pre-resolved placeholder node for a call through a pointer, whose
-      --  real target GCC cannot know statically: contributes no stack of
-      --  its own but counts as one indirect call, and is flagged as a
-      --  Cycle so a stack figure that includes it reads as a lower bound.
+      --  real target GCC cannot know statically; see Is_Indirect_Call.
       if not Self.Sources.Contains (Indirect_Call) then
          Self.Register (Indirect_Call);
          Self.Sources.Insert
            (Indirect_Call,
-            (Node       =>
+            (Node =>
                (Is_External => True,
                 Title       => Indirect_Call,
                 Symbol      => Indirect_Call,
                 Source      => VSS.Strings.Empty_Virtual_String,
-                Name        => "Indirect Call Placeholder"),
-             Result     => (0, 1, 0, True),
-             Calculated => True));
+                Name        => "Indirect Call Placeholder")));
       end if;
    end Complete;
 
@@ -468,53 +469,6 @@ package body Munin.Call_Graph_Providers.CI_Databases is
       return Boolean
    is (Self.Symbol_Of (Node) = "main");
 
-   -------------------------
-   -- Known_Indirect_Call --
-   -------------------------
-
-   function Known_Indirect_Call
-     (Self : Database; Trace : VSS.String_Vectors.Virtual_String_Vector)
-      return VSS.Strings.Virtual_String
-   is
-      use type VSS.String_Vectors.Virtual_String_Vector;
-
-      function Match
-        (Trace, Known : VSS.String_Vectors.Virtual_String_Vector)
-         return Boolean
-      is (Trace.Length >= Known.Length
-          and then Trace.Slice (Trace.Length - Known.Length + 1, Trace.Length)
-                   = Known);
-
-      Last : constant VSS.Strings.Virtual_String := Trace.Last_Element;
-   begin
-      if Self.ICT.Contains (Last) then
-         for Item of Self.ICT (Last) loop
-            if Match (Trace, Item.Caller) then
-               return Item.Target;
-            end if;
-         end loop;
-      end if;
-
-      return VSS.Strings.Empty_Virtual_String;
-   end Known_Indirect_Call;
-
-   -----------------
-   -- In_Progress --
-   -----------------
-
-   function In_Progress
-     (Trace : VSS.String_Vectors.Virtual_String_Vector;
-      Name  : VSS.Strings.Virtual_String) return Boolean is
-   begin
-      for Item of Trace loop
-         if Item = Name then
-            return True;
-         end if;
-      end loop;
-
-      return False;
-   end In_Progress;
-
    ----------
    -- Load --
    ----------
@@ -538,7 +492,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
          Self.Register (Node.Symbol);
 
          if not Self.Sources.Contains (Node.Symbol) then
-            Self.Sources.Insert (Node.Symbol, (Node => Node, others => <>));
+            Self.Sources.Insert (Node.Symbol, (Node => Node));
          elsif Self.Sources (Node.Symbol).Node.Is_External then
             --  Node.Symbol was seen earlier only as another unit's
             --  external reference (a forward reference to a `.ci` file
@@ -555,7 +509,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
          Self.Register (Node.Symbol);
 
          if not Self.Sources.Contains (Node.Symbol) then
-            Self.Sources.Insert (Node.Symbol, (Node => Node, others => <>));
+            Self.Sources.Insert (Node.Symbol, (Node => Node));
          end if;
       end loop;
 
@@ -641,98 +595,45 @@ package body Munin.Call_Graph_Providers.CI_Databases is
          else (Is_Set => False));
    end Position;
 
-   -------------
-   -- Resolve --
-   -------------
+   ---------------
+   -- Own_Stack --
+   ---------------
 
-   function Resolve
-     (Self : in out Database;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node) return Resolve_Result
-   is
-   begin
-      return
-        Self.Resolve
-          (Self.Symbol_Of (Node),
-           VSS.String_Vectors.Empty_Virtual_String_Vector);
-   end Resolve;
+   function Own_Stack
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural
+   is (if Self.Is_Known (Node)
+       then Static_Stack_Of (Self.Sources (Self.Symbol_Of (Node)).Node)
+       else 0);
 
-   function Resolve
-     (Self  : in out Database;
-      Name  : VSS.Strings.Virtual_String;
-      Trace : VSS.String_Vectors.Virtual_String_Vector) return Resolve_Result
-   is
-      Result : Resolve_Result;
-      Next   : VSS.String_Vectors.Virtual_String_Vector;
-   begin
-      if In_Progress (Trace, Name) then
-         --  Recursed back into a node still being resolved: a call cycle.
-         --  Its own stack contribution isn't known yet (that's what this
-         --  very call chain is computing), so contribute nothing but flag
-         --  Cycle; this does not touch Self.Sources(Name), which the
-         --  in-progress outer call is still in the middle of computing.
-         return
-           (Stack_Used      => 0,
-            Indirect_Calls  => 0,
-            Dynamic_Objects => 0,
-            Cycle           => True);
-      end if;
+   ---------------------
+   -- Dynamic_Objects --
+   ---------------------
 
-      if not Self.Sources.Contains (Name) then
-         Self.Sources.Insert
-           (Name,
-            (Node       =>
-               (Is_External => True,
-                Title       => Name,
-                Symbol      => Name,
-                Source      => VSS.Strings.Empty_Virtual_String,
-                Name        => VSS.Strings.Empty_Virtual_String),
-             Result     => (0, 0, 0, True),
-             Calculated => True));
+   function Dynamic_Objects
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural
+   is (if Self.Is_Known (Node)
+       then Dynamic_Objects_Of (Self.Sources (Self.Symbol_Of (Node)).Node)
+       else 0);
 
-      elsif Name = Indirect_Call then
-         declare
-            Target : constant VSS.Strings.Virtual_String :=
-              Self.Known_Indirect_Call (Trace);
-         begin
-            if not Target.Is_Empty then
-               return Self.Resolve (Target, Trace);
-            elsif not Target.Is_Null then
-               --  Empty, but not null: this indirect call is known never
-               --  to execute.
-               return Result;
-            end if;
+   --------------
+   -- Is_Known --
+   --------------
 
-         --  Null: no override was given; fall through to the
-         --  pre-resolved __indirect_call placeholder set up by
-         --  Complete.
-         end;
-      end if;
+   function Is_Known
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.Sources.Contains (Self.Symbol_Of (Node)));
 
-      if Self.Sources (Name).Calculated then
-         return Self.Sources (Name).Result;
-      end if;
+   ----------------------
+   -- Is_Indirect_Call --
+   ----------------------
 
-      Self.Sources (Name).Calculated := True;
-      Next := Trace;
-      Next.Append (Name);
-
-      Result :=
-        (Stack_Used      => 0,
-         Indirect_Calls  => 0,
-         Dynamic_Objects => Dynamic_Objects_Of (Self.Sources (Name).Node),
-         Cycle           => False);
-
-      if Self.Edges.Contains (Name) then
-         for Target of Self.Edges (Name) loop
-            Result := @ + Self.Resolve (Target, Next);
-         end loop;
-      end if;
-
-      Result.Stack_Used := @ + Static_Stack_Of (Self.Sources (Name).Node);
-      Self.Sources (Name).Result := Result;
-
-      return Result;
-   end Resolve;
+   function Is_Indirect_Call
+     (Self : Database; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.Symbol_Of (Node) = Indirect_Call);
 
    -----------
    -- Tasks --

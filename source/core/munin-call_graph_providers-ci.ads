@@ -89,23 +89,38 @@ package Munin.Call_Graph_Providers.CI is
       Caller : VSS.String_Vectors.Virtual_String_Vector;
       Target : VSS.Strings.Virtual_String);
    --  See Munin.Call_Graph_Providers.CI_Databases.Add_Indirect_Call_Target.
-   --  For the future worst-case-stack feature; dormant for now.
+   --  Call after Initialize. For the future worst-case-stack feature;
+   --  dormant for now.
 
    procedure Load_Extra_Data
      (Self   : in out CI_Provider;
       Path   : VSS.Strings.Virtual_String;
       Errors : out VSS.String_Vectors.Virtual_String_Vector);
    --  Read Add_Entry/Add_Indirect_Call_Target overrides from the JSON5
-   --  file at Path (see Munin.Call_Graph_Providers.CI_Extra_Data). Not
+   --  file at Path; call after Initialize, since indirect call targets
+   --  rewrite the graph built by it (see Munin.Call_Graph_Providers.CI_Extra_Data). Not
    --  called automatically by Initialize -- there's no project-relative
    --  way to discover such a file.
 
    overriding
-   function Resolve
-     (Self : in out CI_Provider;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Stack_Usage;
-   --  See Munin.Call_Graph_Providers.CI_Databases.Resolve.
+   function Own_Stack
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural;
+
+   overriding
+   function Dynamic_Objects
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural;
+
+   overriding
+   function Is_Known
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
+
+   overriding
+   function Is_Indirect_Call
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean;
 
    function Find_CI_Files
      (Tree : GPR2.Project.Tree.Object)
