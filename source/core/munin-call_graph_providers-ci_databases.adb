@@ -202,7 +202,7 @@ package body Munin.Call_Graph_Providers.CI_Databases is
         Ada.Containers.Hashed_Maps
           (Key_Type        => Munin.Position,
            Element_Type    => VSS.Strings.Virtual_String,
-           Hash            => Munin.Call_Graph_Providers.Hash,
+           Hash            => Munin.Hash,
            Equivalent_Keys => Munin."=");
 
       Node_By_Position : Position_To_Symbol_Maps.Map;

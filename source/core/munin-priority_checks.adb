@@ -19,53 +19,18 @@ package body Munin.Priority_Checks is
    --  non-decreasing as the fixpoint below runs, and bounded by the
    --  runtime's priority range, so the algorithm always terminates.
 
-   package Predecessor_Maps is new
-     Ada.Containers.Hashed_Maps
-       (Key_Type        => Munin.Call_Graph_Providers.Call_Graph_Node,
-        Element_Type    => Munin.Call_Graph_Providers.Call_Graph_Node,
-        Hash            => Munin.Call_Graph_Providers.Hash,
-        Equivalent_Keys => Munin.Call_Graph_Providers."=");
-   --  Predecessor (Node): the node Best (Node)'s current value was last
-   --  propagated from. Absent for a task root. Used only to reconstruct
-   --  one example call chain per reported violation.
-
    function Check
      (Context  : Munin.Contexts.Context;
       Provider : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
       return Violation_List
    is
       Best        : Priority_Maps.Map;
-      Predecessor : Predecessor_Maps.Map;
-      Worklist    : Node_Vectors.Vector;
+      Predecessor : Munin.Call_Graph_Providers.Containers.Node_Node_Maps.Map;
+      --  Predecessor (Node): the node Best (Node)'s current value was last
+      --  propagated from. Absent for a task root. Used only to reconstruct
+      --  one example call chain per reported violation.
 
-      function Path_To
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-         return Node_Vectors.Vector;
-      --  Node and its chain of Predecessor links, back to (and including)
-      --  the task root it was ultimately reached from, in call order.
-
-      function Path_To
-        (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-         return Node_Vectors.Vector
-      is
-         Reversed : Node_Vectors.Vector;
-         Current  : Munin.Call_Graph_Providers.Call_Graph_Node := Node;
-      begin
-         loop
-            Reversed.Append (Current);
-
-            exit when not Predecessor.Contains (Current);
-
-            Current := Predecessor (Current);
-         end loop;
-
-         return Result : Node_Vectors.Vector do
-            for Index in reverse Reversed.First_Index .. Reversed.Last_Index
-            loop
-               Result.Append (Reversed (Index));
-            end loop;
-         end return;
-      end Path_To;
+      Worklist : Munin.Call_Graph_Providers.Containers.Node_Vectors.Vector;
 
       procedure Seed_Root
         (Root    : Munin.Call_Graph_Providers.Call_Graph_Node;
@@ -144,7 +109,9 @@ package body Munin.Priority_Checks is
                              (Object_Name => Object_Name,
                               Ceiling     => Ceiling,
                               Reached_At  => Reached_At,
-                              Path        => Path_To (Node)));
+                              Path        =>
+                                Munin.Call_Graph_Providers.Containers.Path_To
+                                  (Predecessor, Node)));
                      end if;
                   end;
                end if;

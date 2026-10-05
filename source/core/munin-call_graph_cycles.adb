@@ -31,7 +31,7 @@ package body Munin.Call_Graph_Cycles is
    is
       Infos      : Node_Info_Maps.Map;
       Next_Index : Positive := 1;
-      Stack      : Node_Vectors.Vector;
+      Stack      : Munin.Call_Graph_Providers.Containers.Node_Path;
       Result     : Cycle_Groups;
 
       function Has_Self_Loop

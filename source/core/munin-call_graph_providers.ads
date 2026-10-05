@@ -6,7 +6,6 @@
 with Ada.Containers;
 
 with VSS.Strings;
-with VSS.Strings.Hash;
 
 package Munin.Call_Graph_Providers is
    pragma Preelaborate;
@@ -138,19 +137,9 @@ package Munin.Call_Graph_Providers is
 
 private
 
-   use type Ada.Containers.Hash_Type;
-
    type Call_Graph_Node is new Integer;
 
    function Hash (Node : Call_Graph_Node) return Ada.Containers.Hash_Type
    is (Ada.Containers.Hash_Type (Node));
-
-   function Hash (Position : Optional_Position) return Ada.Containers.Hash_Type
-   is (if not Position.Is_Set
-       then 0
-       else
-         VSS.Strings.Hash (Position.File)
-         xor Ada.Containers.Hash_Type (Position.Line)
-         xor Ada.Containers.Hash_Type (Position.Column));
 
 end Munin.Call_Graph_Providers;
