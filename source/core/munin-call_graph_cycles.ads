@@ -13,24 +13,20 @@
 with Ada.Containers.Vectors;
 
 with Munin.Call_Graph_Providers;
+with Munin.Call_Graph_Providers.Containers;
 
 package Munin.Call_Graph_Cycles is
    pragma Preelaborate;
 
    use type Munin.Call_Graph_Providers.Call_Graph_Node;
 
-   package Node_Vectors is new
-     Ada.Containers.Vectors
-       (Index_Type   => Positive,
-        Element_Type => Munin.Call_Graph_Providers.Call_Graph_Node);
-
-   subtype Cycle_Group is Node_Vectors.Vector;
+   subtype Cycle_Group is Munin.Call_Graph_Providers.Containers.Node_Path;
    --  The subprograms making up one mutually-recursive cycle: either a
    --  strongly connected component of two or more distinct nodes, or a
    --  single node that directly calls itself. Members are in Tarjan's
    --  pop order, not call order.
 
-   use type Node_Vectors.Vector;
+   use type Munin.Call_Graph_Providers.Containers.Node_Vectors.Vector;
 
    package Cycle_Group_Vectors is new
      Ada.Containers.Vectors

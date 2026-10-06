@@ -16,17 +16,13 @@ with Ada.Containers.Vectors;
 with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
-with Munin.Contexts;
+with Munin.Call_Graph_Providers.Containers;
 with Munin.Priorities;
+with Munin.Priority_Sources;
 
 package Munin.Priority_Checks is
 
    use type Munin.Call_Graph_Providers.Call_Graph_Node;
-
-   package Node_Vectors is new
-     Ada.Containers.Vectors
-       (Index_Type   => Positive,
-        Element_Type => Munin.Call_Graph_Providers.Call_Graph_Node);
 
    type Violation is record
       Object_Name : VSS.Strings.Virtual_String;
@@ -39,7 +35,7 @@ package Munin.Priority_Checks is
       --  The highest active priority found to reach the violating call --
       --  always > Ceiling.
 
-      Path : Node_Vectors.Vector;
+      Path : Munin.Call_Graph_Providers.Containers.Node_Path;
       --  An example call chain realizing Reached_At: Path (Path.First_Index)
       --  is a task or interrupt-handler root (an element of some
       --  Call_Graph_Provider's Tasks or Interrupt_Handlers), Path
@@ -55,8 +51,8 @@ package Munin.Priority_Checks is
    subtype Violation_List is Violation_Vectors.Vector;
 
    function Check
-     (Context  : Munin.Contexts.Context;
-      Provider : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
+     (Priorities : Munin.Priority_Sources.Priority_Source'Class;
+      Provider   : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
       return Violation_List;
    --  Every priority-ceiling-locking violation reachable from Provider's
    --  Tasks or Interrupt_Handlers, one per violating call site (regardless

@@ -282,16 +282,45 @@ package body Munin.Call_Graph_Providers.CI is
       return Munin.Optional_Position
    is (Self.DB.Position (Node));
 
-   -------------
-   -- Resolve --
-   -------------
+   ---------------
+   -- Own_Stack --
+   -----------------
 
    overriding
-   function Resolve
-     (Self : in out CI_Provider;
-      Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-      return Munin.Call_Graph_Providers.Stack_Usage
-   is (Self.DB.Resolve (Node));
+   function Own_Stack
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural
+   is (Self.DB.Own_Stack (Node));
+
+   ---------------------
+   -- Dynamic_Objects --
+   ---------------------
+
+   overriding
+   function Dynamic_Objects
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Natural
+   is (Self.DB.Dynamic_Objects (Node));
+
+   --------------
+   -- Is_Known --
+   --------------
+
+   overriding
+   function Is_Known
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.DB.Is_Known (Node));
+
+   ----------------------
+   -- Is_Indirect_Call --
+   ----------------------
+
+   overriding
+   function Is_Indirect_Call
+     (Self : CI_Provider; Node : Munin.Call_Graph_Providers.Call_Graph_Node)
+      return Boolean
+   is (Self.DB.Is_Indirect_Call (Node));
 
    -----------
    -- Tasks --

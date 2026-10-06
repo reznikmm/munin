@@ -89,6 +89,23 @@ operations -- through an ordinary subprogram, or through an operation of
 some *other* protected object -- and then comes back is flagged. Also
 derived from `-fcallgraph-info=su,da` output.
 
+## Exit status
+
+| Status | Meaning |
+|-------:|---------|
+| 0 | Command completed; for `check ...`, no violations found |
+| 1 | `check ...` completed and found at least one violation |
+| 2 | Usage error, project failed to load, missing `.ci` data, output write failure, or internal error |
+
+`show ...` commands return 0 on success and 2 on errors; they never
+return 1. This makes `check` usable as a CI gate, for example in GitHub
+Actions:
+
+```yaml
+- run: munin check priorities -P my_project.gpr
+- run: munin check locks -P my_project.gpr
+```
+
 ## Priority Resolution
 
 Munin resolves the `Priority`/`Interrupt_Priority` of every discovered task

@@ -10,11 +10,10 @@ package body Munin.Lock_Checks is
 
    use type VSS.Strings.Virtual_String;
 
-   package Node_Sets is new
-     Ada.Containers.Hashed_Sets
-       (Element_Type        => Munin.Call_Graph_Providers.Call_Graph_Node,
-        Hash                => Munin.Call_Graph_Providers.Hash,
-        Equivalent_Elements => Munin.Call_Graph_Providers."=");
+   package Node_Vectors renames
+     Munin.Call_Graph_Providers.Containers.Node_Vectors;
+
+   package Node_Sets renames Munin.Call_Graph_Providers.Containers.Node_Sets;
 
    package Position_Sets is new
      Ada.Containers.Hashed_Sets
@@ -46,17 +45,6 @@ package body Munin.Lock_Checks is
    --  onward. Monotonically non-decreasing as the fixpoint below runs
    --  (never reset from True back to False), so the algorithm always
    --  terminates.
-
-   package Predecessor_Maps is new
-     Ada.Containers.Hashed_Maps
-       (Key_Type        => Munin.Call_Graph_Providers.Call_Graph_Node,
-        Element_Type    => Munin.Call_Graph_Providers.Call_Graph_Node,
-        Hash            => Munin.Call_Graph_Providers.Hash,
-        Equivalent_Keys => Munin.Call_Graph_Providers."=");
-   --  Predecessor (Node): the node Tainted (Node)'s current value was
-   --  last propagated from. Absent for a node seeded directly (the real
-   --  body of one of the checked object's own operations). Used only to
-   --  reconstruct one example call chain per reported violation.
 
    function Check
      (Provider : Munin.Call_Graph_Providers.Call_Graph_Provider'Class)
@@ -147,35 +135,16 @@ package body Munin.Lock_Checks is
          --  name.
 
          Tainted     : Taint_Maps.Map;
-         Predecessor : Predecessor_Maps.Map;
-         Worklist    : Node_Vectors.Vector;
+         Predecessor :
+           Munin.Call_Graph_Providers.Containers.Node_Node_Maps.Map;
+         --  Predecessor (Node): the node Tainted (Node)'s current value
+         --  was last propagated from. Absent for a node seeded directly
+         --  (the real body of one of the checked object's own
+         --  operations). Used only to reconstruct one example call chain
+         --  per reported violation.
 
-         function Path_To
-           (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-            return Node_Vectors.Vector;
+         Worklist : Node_Vectors.Vector;
 
-         function Path_To
-           (Node : Munin.Call_Graph_Providers.Call_Graph_Node)
-            return Node_Vectors.Vector
-         is
-            Reversed : Node_Vectors.Vector;
-            Current  : Munin.Call_Graph_Providers.Call_Graph_Node := Node;
-         begin
-            loop
-               Reversed.Append (Current);
-
-               exit when not Predecessor.Contains (Current);
-
-               Current := Predecessor (Current);
-            end loop;
-
-            return Result : Node_Vectors.Vector do
-               for Index in reverse Reversed.First_Index .. Reversed.Last_Index
-               loop
-                  Result.Append (Reversed (Index));
-               end loop;
-            end return;
-         end Path_To;
       begin
          for Node of Nodes loop
             declare
@@ -273,7 +242,11 @@ package body Munin.Lock_Checks is
             for Node of Nodes loop
                if Tainted.Contains (Node) and then Tainted (Node) then
                   Result.Append
-                    (Violation'(Object_Name => Name, Path => Path_To (Node)));
+                    (Violation'
+                       (Object_Name => Name,
+                        Path        =>
+                          Munin.Call_Graph_Providers.Containers.Path_To
+                            (Predecessor, Node)));
                end if;
             end loop;
          end return;

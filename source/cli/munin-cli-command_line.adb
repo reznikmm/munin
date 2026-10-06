@@ -3,6 +3,8 @@
 --  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 ------------------------------------------------------------------
 
+with Munin.CLI.Errors;
+
 with VSS.Application;
 with VSS.Command_Line.Parsers;
 with VSS.Strings.Conversions;
@@ -36,7 +38,7 @@ package body Munin.CLI.Command_Line is
       Parser.Add_Option (Subject_Option);
 
       if not Parser.Parse (VSS.Application.Arguments) then
-         VSS.Command_Line.Report_Error (Parser.Error_Message);
+         Munin.CLI.Errors.Report_Error (Parser.Error_Message);
       end if;
 
       if Parser.Is_Specified (Help_Option) then
@@ -44,7 +46,7 @@ package body Munin.CLI.Command_Line is
       end if;
 
       if not Parser.Unknown_Option_Arguments.Is_Empty then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (VSS.Strings.Conversions.To_Virtual_String
               ("Unknown option: "
                & VSS.Strings.Conversions.To_UTF_8_String
@@ -52,7 +54,7 @@ package body Munin.CLI.Command_Line is
       end if;
 
       if not Parser.Is_Specified (Project_Option) then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (VSS.Strings.Conversions.To_Virtual_String
               ("Missing required --project/-P argument"));
       end if;
@@ -60,7 +62,7 @@ package body Munin.CLI.Command_Line is
       if Parser.Value (Command_Option) /= "show"
         and then Parser.Value (Command_Option) /= "check"
       then
-         VSS.Command_Line.Report_Error
+         Munin.CLI.Errors.Report_Error
            (VSS.Strings.Conversions.To_Virtual_String
               ("Expected command: show "
                & "priorities|callgraph|cycles|interrupts|stack, or "
@@ -78,7 +80,7 @@ package body Munin.CLI.Command_Line is
                Result.Subject := Check_Locks;
 
             else
-               VSS.Command_Line.Report_Error
+               Munin.CLI.Errors.Report_Error
                  (VSS.Strings.Conversions.To_Virtual_String
                     ("Expected subject: priorities, locks"));
             end if;
@@ -99,7 +101,7 @@ package body Munin.CLI.Command_Line is
             Result.Subject := Show_Stack;
 
          else
-            VSS.Command_Line.Report_Error
+            Munin.CLI.Errors.Report_Error
               (VSS.Strings.Conversions.To_Virtual_String
                  ("Expected subject: priorities, callgraph, cycles, "
                   & "interrupts, or stack"));

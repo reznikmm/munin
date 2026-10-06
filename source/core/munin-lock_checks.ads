@@ -32,22 +32,18 @@ with Ada.Containers.Vectors;
 with VSS.Strings;
 
 with Munin.Call_Graph_Providers;
+with Munin.Call_Graph_Providers.Containers;
 
 package Munin.Lock_Checks is
 
    use type Munin.Call_Graph_Providers.Call_Graph_Node;
-
-   package Node_Vectors is new
-     Ada.Containers.Vectors
-       (Index_Type   => Positive,
-        Element_Type => Munin.Call_Graph_Providers.Call_Graph_Node);
 
    type Violation is record
       Object_Name : VSS.Strings.Virtual_String;
       --  Qualified name of the protected object called back into while
       --  already locked.
 
-      Path : Node_Vectors.Vector;
+      Path : Munin.Call_Graph_Providers.Containers.Node_Path;
       --  An example call chain realizing the re-entry: Path
       --  (Path.First_Index) is the real body of the operation through
       --  which Object_Name was first entered, Path (Path.Last_Index) is

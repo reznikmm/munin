@@ -37,6 +37,7 @@ package Munin.CLI.Command_Line is
    --  or `check priorities|locks -P <project-file>`. On a parse error, an
    --  unknown/missing argument, or -h/--help, reports the message and
    --  terminates the process (via
-   --  VSS.Command_Line.Report_Error/Report_Message) instead of returning.
+   --  Munin.CLI.Errors.Report_Error, status 2, or
+   --  VSS.Command_Line.Report_Message, status 0) instead of returning.
 
 end Munin.CLI.Command_Line;
